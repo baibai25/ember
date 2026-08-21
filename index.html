@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Ember</title>
+<meta name="robots" content="noindex,nofollow,noarchive">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ember">
+<meta name="theme-color" content="#FAF8F4">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<script>
+/* 描画前にテーマを当てる（切り替え時のちらつき防止） */
+(function(){
+  try{
+    var raw = localStorage.getItem('ember.v1') || localStorage.getItem('tsuzukeru.v1') || '{}';
+    var s = JSON.parse(raw);
+    var t = (s.settings && s.settings.theme) || 'system';
+    if(t !== 'system') document.documentElement.setAttribute('data-theme', t);
+  }catch(e){}
+})();
+</script>
+<style>
+/*
+  ライト = Editorial（紙面。余白と罫線で構成する）
+  ダーク = Ember Glow（熾火。暗がりの中で光る）
+  共通    = 連続日数が伸びるほど色が深く／熱くなる（--ember は JS が算出）
+*/
+:root{
+  --paper:#FAF8F4; --ink:#15120E;
+  --bg:var(--paper); --surface:#FFFFFF; --surface2:#F1EEE8;
+  --text:var(--ink); --muted:#8B857C; --border:rgba(21,18,14,.13);
+  --rule:rgba(21,18,14,.13);
+  --on-ember:#FAF8F4; --gold:#A8761B; --danger:#B3261E;
+
+  --serif:ui-serif,"New York","Hiragino Mincho ProN",Georgia,"Times New Roman",serif;
+
+  --num-fill:var(--ember); --num-bg:none; --num-glow:none;
+  --cell-radius:2px; --cell-glow:none;
+  --aura:0; --flash:rgba(176,58,26,.14);
+  --shadow:none;
+  --radius:12px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0A0809; --surface:rgba(255,255,255,.035); --surface2:rgba(255,255,255,.06);
+    --text:#F3EBE3; --muted:#8B7B6E; --border:rgba(255,255,255,.09);
+    --rule:rgba(255,255,255,.09);
+    --on-ember:#140D08; --gold:#F59E0B; --danger:#F87171;
+
+    --num-fill:transparent;
+    --num-bg:linear-gradient(180deg,#FFF3E4 0%,var(--ember) 88%);
+    --num-glow:drop-shadow(0 0 24px var(--ember-glow));
+    --cell-radius:5px; --cell-glow:0 0 10px var(--ember-glow);
+    --aura:calc(.18 + var(--heat) * .82);
+    --flash:rgba(249,115,22,.3);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0A0809; --surface:rgba(255,255,255,.035); --surface2:rgba(255,255,255,.06);
+  --text:#F3EBE3; --muted:#8B7B6E; --border:rgba(255,255,255,.09);
+  --rule:rgba(255,255,255,.09);
+  --on-ember:#140D08; --gold:#F59E0B; --danger:#F87171;
+
+  --num-fill:transparent;
+  --num-bg:linear-gradient(180deg,#FFF3E4 0%,var(--ember) 88%);
+  --num-glow:drop-shadow(0 0 24px var(--ember-glow));
+  --cell-radius:5px; --cell-glow:0 0 10px var(--ember-glow);
+  --aura:calc(.18 + var(--heat) * .82);
+  --flash:rgba(249,115,22,.3);
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  padding-top:env(safe-area-inset-top);
+  -webkit-user-select:none;user-select:none;overscroll-behavior-y:none;
+}
+#aura{
+  position:fixed;top:-70px;left:50%;transform:translateX(-50%);
+  width:560px;height:560px;border-radius:50%;pointer-events:none;z-index:0;
+  background:radial-gradient(circle,var(--ember-glow) 0%,transparent 66%);
+  filter:blur(26px);opacity:var(--aura);transition:opacity .7s ease;
+}
+#flash{
+  position:fixed;inset:0;pointer-events:none;z-index:40;opacity:0;
+  background:radial-gradient(circle at 50% 42%,var(--flash),transparent 64%);
+}
+#flash.on{animation:wash .55s ease-out}
+@keyframes wash{0%{opacity:0}20%{opacity:1}100%{opacity:0}}
+
+#app{position:relative;z-index:1;max-width:520px;margin:0 auto;padding:0 22px 118px}
+
+.masthead{
+  font-size:9.5px;letter-spacing:.36em;color:var(--muted);
+  padding:16px 0 14px;border-bottom:1px solid var(--rule);
+}
+h2{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.2em;margin:0 0 14px}
+
+/* ---------- hero ---------- */
+.hero{padding:34px 0 4px;text-align:center}
+.hero.compact{padding:22px 0 6px;text-align:left}
+
+.statline{display:flex;align-items:baseline;justify-content:space-between;padding-bottom:18px;border-bottom:1px solid var(--rule)}
+.statline .lead{font-size:11px;letter-spacing:.16em;color:var(--muted)}
+.statline .n{
+  font-family:var(--serif);font-size:38px;letter-spacing:-.02em;margin-right:7px;
+  color:var(--num-fill);background-image:var(--num-bg);
+  -webkit-background-clip:text;background-clip:text;filter:var(--num-glow);
+}
+.statline .aside{font-size:11px;letter-spacing:.12em;color:var(--muted)}
+
+.bignum{
+  font-family:var(--serif);font-size:112px;line-height:.86;letter-spacing:-.045em;font-weight:400;
+  color:var(--num-fill);background-image:var(--num-bg);
+  -webkit-background-clip:text;background-clip:text;filter:var(--num-glow);
+}
+.biglabel{font-size:10px;color:var(--muted);margin-top:20px;letter-spacing:.36em;text-indent:.36em}
+.substats{
+  display:flex;margin-top:28px;padding-top:16px;border-top:1px solid var(--rule);
+}
+.stat{
+  flex:1;font-size:9px;letter-spacing:.12em;color:var(--muted);
+  border-left:1px solid var(--rule);padding-left:12px;text-align:left;
+}
+.stat:first-child{border-left:0;padding-left:0}
+.stat b{display:block;font-size:15px;color:var(--text);margin-top:5px;font-weight:600;letter-spacing:0}
+
+/* ---------- tasks ---------- */
+.tasks{list-style:none;margin:0;padding:0}
+.task{
+  display:flex;align-items:center;gap:14px;
+  padding:15px 2px;border-bottom:1px solid var(--rule);
+  background:transparent;border-radius:0;transition:background .3s;
+}
+.task.done{background:var(--ember-soft)}
+.task .name{flex:1;font-size:16px;font-weight:500;line-height:1.35;word-break:break-word}
+.task.done .name{color:var(--muted)}
+
+.btn{position:relative;width:44px;height:44px;flex:none;padding:0;border:0;background:transparent;touch-action:none;cursor:pointer}
+.btn svg{position:absolute;inset:0;width:44px;height:44px;transform:rotate(-90deg)}
+.btn circle{fill:none;stroke-width:2.5;stroke-linecap:round}
+.btn .track{stroke:var(--border)}
+.btn .prog{stroke:var(--ember);stroke-dasharray:113.1;stroke-dashoffset:113.1;transition:stroke-dashoffset .06s linear}
+.btn .core{
+  position:absolute;inset:7px;border-radius:50%;background:var(--surface2);
+  display:grid;place-items:center;font-size:16px;color:transparent;
+  transition:background .3s,transform .3s;
+}
+.task.done .btn .core{background:var(--ember);color:var(--on-ember);transform:scale(1.05);box-shadow:var(--cell-glow)}
+.task.done .btn .track{stroke:transparent}
+@keyframes pop{0%{transform:scale(.65)}58%{transform:scale(1.18)}100%{transform:scale(1.05)}}
+.task.just .btn .core{animation:pop .34s ease-out}
+
+.hint{font-size:10px;letter-spacing:.14em;color:var(--muted);text-align:center;margin:18px 0 0}
+.empty{padding:44px 18px;text-align:center;color:var(--muted);font-size:13px;letter-spacing:.06em;border-bottom:1px solid var(--rule)}
+
+/* ---------- grid ---------- */
+.gridwrap{margin-top:44px}
+.gridhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+.gridhead h2{margin:0}
+.gridhead .range{font-size:10px;letter-spacing:.1em;color:var(--muted);font-variant-numeric:tabular-nums}
+.wd{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
+.wd span{text-align:center;font-size:8.5px;letter-spacing:.1em;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cell{
+  aspect-ratio:1;border-radius:var(--cell-radius);background:var(--surface2);
+  position:relative;cursor:pointer;display:grid;place-items:center;
+  font-size:9px;color:var(--muted);transition:background .4s;
+}
+.cell.done{background:var(--ember);color:var(--on-ember);font-weight:700;box-shadow:var(--cell-glow)}
+.cell.shield{background:transparent;box-shadow:inset 0 0 0 1.5px var(--gold);color:var(--gold)}
+.cell.future{opacity:.3;pointer-events:none}
+.cell.today{outline:1px solid var(--text);outline-offset:2px}
+.cell .mon{font-size:8px;font-weight:700;letter-spacing:-.03em}
+.legend{display:flex;gap:16px;justify-content:center;margin-top:18px;font-size:9.5px;letter-spacing:.08em;color:var(--muted)}
+.legend i{width:9px;height:9px;border-radius:2px;display:inline-block;vertical-align:0;margin-right:6px}
+
+/* ---------- settings ---------- */
+.card{border-top:1px solid var(--rule);padding:22px 0 4px;margin-bottom:8px}
+.card:first-of-type{border-top:0}
+.row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--rule)}
+.row:last-child{border-bottom:0}
+.row .name{flex:1;font-size:15px;word-break:break-word}
+input[type=text],select{
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  border-radius:9px;padding:12px 13px;font-size:16px;font-family:inherit;width:100%;
+  -webkit-user-select:text;user-select:text;
+}
+.mini{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;width:34px;height:34px;font-size:14px;flex:none;cursor:pointer}
+.mini.danger{color:var(--danger)}
+.wide{width:100%;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:10px;padding:14px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
+.wide.primary{background:var(--ember);color:var(--on-ember);border-color:var(--ember)}
+.note{font-size:11.5px;color:var(--muted);line-height:1.8;margin:12px 0 0}
+
+/* ---------- nav ---------- */
+nav{
+  position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;
+  background:var(--bg);border-top:1px solid var(--rule);
+  padding-bottom:env(safe-area-inset-bottom);max-width:520px;margin:0 auto;
+}
+nav button{
+  flex:1;background:none;border:0;color:var(--muted);
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+  padding:12px 0 14px;font-size:10px;font-weight:600;letter-spacing:.14em;
+  font-family:inherit;cursor:pointer;transition:color .2s;
+}
+nav button svg{
+  width:23px;height:23px;fill:none;stroke:currentColor;
+  stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;transition:stroke-width .2s;
+}
+nav button.on{color:var(--text)}
+nav button.on svg{stroke-width:1.9}
+
+/* ---------- sheet ---------- */
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:30}
+.backdrop.on{display:block}
+.sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:31;background:var(--bg);
+  border-top:1px solid var(--rule);border-radius:18px 18px 0 0;
+  padding:22px 22px calc(26px + env(safe-area-inset-bottom));
+  max-width:520px;margin:0 auto;transform:translateY(100%);
+  transition:transform .24s ease;max-height:82vh;overflow:auto;
+}
+.sheet.on{transform:translateY(0)}
+.sheet h3{margin:0 0 4px;font-size:17px;font-weight:600}
+.sheet .sub{color:var(--muted);font-size:11px;letter-spacing:.1em;margin:0 0 18px}
+.toggle{display:flex;align-items:center;gap:12px;padding:14px 2px;border-bottom:1px solid var(--rule);cursor:pointer}
+.toggle.on{background:var(--ember-soft)}
+.toggle .box{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border);flex:none;display:grid;place-items:center;font-size:12px;color:transparent}
+.toggle.on .box{background:var(--ember);border-color:var(--ember);color:var(--on-ember)}
+.toggle .t{flex:1;font-size:15px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<div id="aura"></div>
+<div id="flash"></div>
+
+<div id="app">
+  <div id="view-home">
+    <div class="masthead">EMBER</div>
+    <div id="hero" class="hero"></div>
+
+    <section style="margin-top:30px">
+      <h2 id="tasks-title">今日やること</h2>
+      <ul class="tasks" id="tasks"></ul>
+      <p class="hint" id="hint">長押しで記録</p>
+    </section>
+
+    <section class="gridwrap">
+      <div class="gridhead"><h2>直近5週間</h2><span class="range" id="range"></span></div>
+      <div class="wd"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
+      <div class="grid" id="grid"></div>
+      <div class="legend">
+        <span><i style="background:var(--ember)"></i>達成</span>
+        <span><i style="box-shadow:inset 0 0 0 1.5px var(--gold)"></i>シールド</span>
+        <span><i style="background:var(--surface2)"></i>未達</span>
+      </div>
+    </section>
+  </div>
+
+  <div id="view-settings" class="hidden">
+    <div class="masthead">EMBER ／ 設定</div>
+
+    <div class="card">
+      <h2>タスク</h2>
+      <div id="task-editor"></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <input type="text" id="new-task" placeholder="例：スクワット10回" maxlength="40">
+        <button class="mini" id="add-task" style="width:44px">＋</button>
+      </div>
+      <p class="note">削除してもアーカイブされるだけで、過去の記録と連続日数は保持されます。</p>
+    </div>
+
+    <div class="card">
+      <h2>外観</h2>
+      <select id="theme">
+        <option value="system">システムに合わせる</option>
+        <option value="light">ライト</option>
+        <option value="dark">ダーク</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <h2>1日の区切り</h2>
+      <select id="boundary">
+        <option value="0">深夜 0時</option>
+        <option value="2">午前 2時</option>
+        <option value="3">午前 3時</option>
+        <option value="4">午前 4時</option>
+        <option value="5">午前 5時</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <h2>記録</h2>
+      <div class="row"><span class="name">累計ポイント</span><b id="s-pt">0</b></div>
+      <div class="row"><span class="name">保有シールド</span><b id="s-sh">0</b></div>
+      <div class="row"><span class="name">自己ベスト</span><b id="s-best">0 日</b></div>
+      <div class="row"><span class="name">シールド消費</span><b id="s-used">0 日</b></div>
+    </div>
+
+    <div class="card">
+      <h2>バックアップ</h2>
+      <button class="wide primary" id="backup">バックアップを書き出す</button>
+      <div style="height:9px"></div>
+      <button class="wide" id="restore-btn">バックアップから復元</button>
+      <input type="file" id="restore" accept="application/json,.json" class="hidden">
+      <p class="note" id="backup-note">iOSは7日間開かれなかったアプリのデータを削除することがあります。定期的な書き出しを推奨します。</p>
+    </div>
+  </div>
+</div>
+
+<nav>
+  <button id="nav-home" class="on">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3.4 10.3 12 3.4l8.6 6.9"/>
+      <path d="M5.6 8.9v10.7h12.8V8.9"/>
+      <path d="M9.7 19.6v-5.9h4.6v5.9"/>
+    </svg>
+    ホーム
+  </button>
+  <button id="nav-settings">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8.93 4.40 9.36 2.15 14.64 2.15 15.07 4.40 17.05 5.54 19.21 4.79 21.85 9.36 20.12 10.86 20.12 13.14 21.85 14.64 19.21 19.21 17.05 18.46 15.07 19.60 14.64 21.85 9.36 21.85 8.93 19.60 6.95 18.46 4.79 19.21 2.15 14.64 3.88 13.14 3.88 10.86 2.15 9.36 4.79 4.79 6.95 5.54Z"/>
+      <circle cx="12" cy="12" r="3.2"/>
+    </svg>
+    設定
+  </button>
+</nav>
+
+<div class="backdrop" id="backdrop"></div>
+<div class="sheet" id="sheet">
+  <h3 id="sheet-date"></h3>
+  <p class="sub">タップして記録を修正できます</p>
+  <div id="sheet-body"></div>
+</div>
+
+<script>
+'use strict';
+
+/* ============ 定数 ============ */
+const KEY = 'ember.v1';
+const LEGACY_KEYS = ['tsuzukeru.v1'];
+const PT_PER_SHIELD = 7;
+const PRESS_MS = 500;
+const WD = ['日','月','火','水','木','金','土'];
+
+/* 連続日数 → 色。ライトは深く沈み、ダークは明るく燃える */
+const RAMP_LIGHT = [[0,[150,145,138]],[3,[198,120,74]],[14,[176,58,26]],[45,[122,30,8]]];
+const RAMP_DARK  = [[0,[122,116,108]],[3,[217,119,6]],[14,[249,140,40]],[45,[253,186,116]]];
+
+/* ============ 状態 ============ */
+let state = load();
+
+function blank(){
+  return {
+    version: 1,
+    settings: { dayBoundaryHour: 4, theme: 'system' },   // theme: system | light | dark
+    tasks: [],
+    logs: {},                 // "YYYY-MM-DD": [taskId, ...]
+    shieldsConsumed: [],      // ["YYYY-MM-DD", ...]
+    meta: { lastCheckedDate: null, bestStreak: 0, lastBackupAt: null }
+  };
+}
+function load(){
+  try{
+    let raw = localStorage.getItem(KEY);
+    if(!raw){
+      // 旧名のデータがあれば引き継ぐ
+      for(const k of LEGACY_KEYS){
+        const old = localStorage.getItem(k);
+        if(old){ raw = old; localStorage.setItem(KEY, old); localStorage.removeItem(k); break; }
+      }
+    }
+    if(!raw) return blank();
+    const s = JSON.parse(raw);
+    const b = blank();
+    return Object.assign(b, s, {
+      settings: Object.assign(b.settings, s.settings||{}),
+      meta: Object.assign(b.meta, s.meta||{})
+    });
+  }catch(e){ return blank(); }
+}
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(state)); }
+  catch(e){ alert('保存に失敗しました。ストレージの空き容量を確認してください。'); }
+}
+
+/* ============ 日付ユーティリティ ============ */
+function iso(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function md(s){ const d=parseISO(s); return (d.getMonth()+1)+'/'+d.getDate(); }
+function parseISO(s){ const p=s.split('-').map(Number); return new Date(p[0],p[1]-1,p[2]); }
+function addDays(s,n){ const d=parseISO(s); d.setDate(d.getDate()+n); return iso(d); }
+/** 午前4時区切りを反映した「今日」 */
+function today(){
+  return iso(new Date(Date.now() - state.settings.dayBoundaryHour*3600000));
+}
+
+/* ============ 導出値（保存しない） ============ */
+function isDone(date){ const l = state.logs[date]; return !!(l && l.length); }
+function points(){ return Object.keys(state.logs).filter(isDone).length; }
+function shieldsGenerated(){ return Math.floor(points()/PT_PER_SHIELD); }
+function shieldsAvailable(){ return shieldsGenerated() - state.shieldsConsumed.length; }
+function ptToNextShield(){ return PT_PER_SHIELD - (points() % PT_PER_SHIELD); }
+
+/** 連続日数：記録から毎回計算し直す */
+function streak(){
+  const consumed = new Set(state.shieldsConsumed);
+  const t = today();
+  let d = isDone(t) ? t : addDays(t,-1);  // 今日が未達でも、まだ1日は終わっていない
+  let n = 0, guard = 0;
+  while(guard++ < 4000){
+    if(isDone(d)) { n++; d = addDays(d,-1); }
+    else if(consumed.has(d)) { d = addDays(d,-1); }   // 維持するが日数は増えない
+    else break;
+  }
+  return n;
+}
+
+/**
+ * シールドの自動消費。PWAはバックグラウンドで動けないため、
+ * 起動時に未達だった日を遡って処理する。
+ * 連続が切れることが確定している場合は消費しない（無駄遣い防止）。
+ */
+function processShields(){
+  const t = today();
+  if(state.meta.lastCheckedDate === t) return;
+
+  if(Object.keys(state.logs).length){
+    const consumed = new Set(state.shieldsConsumed);
+    const gaps = [];
+    let d = addDays(t,-1), guard = 0;
+    while(guard++ < 4000 && !isDone(d) && !consumed.has(d)) { gaps.push(d); d = addDays(d,-1); }
+
+    // 直前に「生きている日」が存在し、手持ちで全部埋め切れる場合のみ消費する
+    const alive = isDone(d) || consumed.has(d);
+    if(alive && gaps.length > 0 && gaps.length <= shieldsAvailable()){
+      state.shieldsConsumed = state.shieldsConsumed.concat(gaps).sort();
+    }
+  }
+  state.meta.lastCheckedDate = t;
+  save();
+}
+
+/* ============ 更新 ============ */
+function toggleTask(date, taskId){
+  const list = state.logs[date] ? state.logs[date].slice() : [];
+  const i = list.indexOf(taskId);
+  if(i >= 0) list.splice(i,1); else list.push(taskId);
+
+  if(list.length) state.logs[date] = list;
+  else delete state.logs[date];
+
+  // 達成に変わった日にシールドを使っていたら返却する
+  if(list.length){
+    const j = state.shieldsConsumed.indexOf(date);
+    if(j >= 0) state.shieldsConsumed.splice(j,1);
+  }
+
+  const s = streak();
+  if(s > state.meta.bestStreak) state.meta.bestStreak = s;
+  save();
+}
+
+/* ============ テーマと「反応する色」 ============ */
+const $ = id => document.getElementById(id);
+
+function isDarkNow(){
+  const t = state.settings.theme || 'system';
+  if(t === 'dark') return true;
+  if(t === 'light') return false;
+  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+}
+function rampColor(ramp, s){
+  let a = ramp[0], b = ramp[ramp.length-1];
+  for(let i=0;i<ramp.length-1;i++){
+    if(s >= ramp[i][0] && s <= ramp[i+1][0]){ a = ramp[i]; b = ramp[i+1]; break; }
+  }
+  if(s >= b[0]) return b[1];
+  const t = (s - a[0]) / Math.max(1, b[0]-a[0]);
+  return a[1].map((v,i)=> Math.round(v + (b[1][i]-v)*t));
+}
+/** 連続日数に応じて色と熱量を更新する */
+function applyHeat(){
+  const s = streak();
+  const [r,g,b] = rampColor(isDarkNow() ? RAMP_DARK : RAMP_LIGHT, s);
+  const root = document.documentElement.style;
+  root.setProperty('--ember', `rgb(${r},${g},${b})`);
+  root.setProperty('--ember-soft', `rgba(${r},${g},${b},.07)`);
+  root.setProperty('--ember-glow', `rgba(${r},${g},${b},.42)`);
+  root.setProperty('--heat', String(Math.min(1, s/30)));
+}
+function applyTheme(){
+  const t = state.settings.theme || 'system';
+  const root = document.documentElement;
+  if(t === 'system') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', t);
+
+  applyHeat();
+
+  // ステータスバーの色を実際の背景に合わせる
+  const bg = getComputedStyle(root).getPropertyValue('--bg').trim();
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if(meta && bg) meta.setAttribute('content', bg);
+}
+if(window.matchMedia){
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  if(mq.addEventListener) mq.addEventListener('change', ()=>{ if((state.settings.theme||'system')==='system') applyTheme(); });
+}
+function flash(){
+  const el = $('flash');
+  el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
+}
+
+/* ============ 描画 ============ */
+function render(){
+  applyHeat();
+  renderHero();
+  renderTasks();
+  renderGrid();
+  renderSettings();
+}
+
+function renderHero(){
+  const t = today(), s = streak(), done = isDone(t), el = $('hero');
+  $('hint').textContent = state.tasks.filter(x=>!x.archived).length ? '長押しで記録' : '';
+
+  if(done){
+    // 達成した日だけ大きく出す
+    el.className = 'hero';
+    el.innerHTML =
+      '<div class="bignum">'+s+'</div>'+
+      '<div class="biglabel">日連続</div>'+
+      '<div class="substats">'+
+        '<div class="stat">自己ベスト<b>'+state.meta.bestStreak+' 日</b></div>'+
+        '<div class="stat">シールド<b>'+shieldsAvailable()+' 枚</b></div>'+
+        '<div class="stat">次の1枚まで<b>あと '+ptToNextShield()+' 日</b></div>'+
+      '</div>';
+    $('tasks-title').textContent = '今日やったこと';
+  } else {
+    // 未達の日は連続0でも扱いを変えない
+    el.className = 'hero compact';
+    el.innerHTML =
+      '<div class="statline">'+
+        '<span class="lead"><span class="n">'+s+'</span> 日連続</span>'+
+        '<span class="aside">'+(shieldsAvailable() ? 'シールド '+shieldsAvailable() : '')+'</span>'+
+      '</div>';
+    $('tasks-title').textContent = '今日やること';
+  }
+}
+
+function renderTasks(){
+  const t = today(), ul = $('tasks');
+  const list = state.tasks.filter(x=>!x.archived).sort((a,b)=>a.order-b.order);
+  ul.innerHTML = '';
+
+  if(!list.length){
+    ul.innerHTML = '<li class="empty">設定タブからタスクを追加してください</li>';
+    return;
+  }
+  list.forEach(task=>{
+    const done = (state.logs[t]||[]).includes(task.id);
+    const li = document.createElement('li');
+    li.className = 'task' + (done ? ' done' : '');
+    li.dataset.id = task.id;
+    li.innerHTML =
+      '<span class="name"></span>'+
+      '<button class="btn" aria-label="記録">'+
+        '<svg viewBox="0 0 44 44"><circle class="track" cx="22" cy="22" r="18"></circle>'+
+        '<circle class="prog" cx="22" cy="22" r="18"></circle></svg>'+
+        '<span class="core">✓</span>'+
+      '</button>';
+    li.querySelector('.name').textContent = task.name;
+    attachPress(li.querySelector('.btn'), ()=>{
+      toggleTask(t, task.id);
+      const nowDone = (state.logs[t]||[]).includes(task.id);
+      render();
+      if(nowDone){
+        const fresh = ul.querySelector('.task[data-id="'+task.id+'"]');
+        if(fresh) fresh.classList.add('just');
+        flash();
+      }
+      if(navigator.vibrate) navigator.vibrate(12); // iOSは非対応
+    });
+    ul.appendChild(li);
+  });
+}
+
+function renderGrid(){
+  const t = today(), grid = $('grid');
+  const consumed = new Set(state.shieldsConsumed);
+
+  // 今週の土曜日を末尾にした 5週 × 7日
+  const td = parseISO(t);
+  const end = addDays(t, 6 - td.getDay());
+  const start = addDays(end, -34);
+  $('range').textContent = md(start) + ' – ' + md(end);
+
+  grid.innerHTML = '';
+  for(let i=0;i<35;i++){
+    const d = addDays(start,i);
+    const day = parseISO(d).getDate();
+    const cell = document.createElement('div');
+    let cls = 'cell';
+    if(d > t) cls += ' future';
+    else if(isDone(d)) cls += ' done';
+    else if(consumed.has(d)) cls += ' shield';
+    if(d === t) cls += ' today';
+    if(day === 1) cls += ' first';
+    cell.className = cls;
+    // 月初のマスだけ「9/1」と表示し、月の変わり目が分かるようにする
+    if(day === 1){ cell.innerHTML = '<span class="mon"></span>'; cell.firstChild.textContent = md(d); }
+    else cell.textContent = day;
+    cell.onclick = ()=> openSheet(d);
+    grid.appendChild(cell);
+  }
+}
+
+function renderSettings(){
+  const box = $('task-editor');
+  const list = state.tasks.filter(x=>!x.archived).sort((a,b)=>a.order-b.order);
+  box.innerHTML = '';
+
+  if(!list.length){
+    box.innerHTML = '<p class="note" style="margin:0">まだタスクがありません。</p>';
+  }
+  list.forEach((task,i)=>{
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML =
+      '<span class="name"></span>'+
+      '<button class="mini" title="上へ">↑</button>'+
+      '<button class="mini" title="下へ">↓</button>'+
+      '<button class="mini danger" title="削除">×</button>';
+    row.querySelector('.name').textContent = task.name;
+    const b = row.querySelectorAll('.mini');
+    b[0].onclick = ()=>{ if(i>0){ swap(list,i,i-1); save(); render(); } };
+    b[1].onclick = ()=>{ if(i<list.length-1){ swap(list,i,i+1); save(); render(); } };
+    b[2].onclick = ()=>{
+      if(confirm('「'+task.name+'」を一覧から外します。過去の記録は残ります。')){
+        task.archived = true; save(); render();
+      }
+    };
+    box.appendChild(row);
+  });
+
+  $('theme').value = state.settings.theme || 'system';
+  $('boundary').value = String(state.settings.dayBoundaryHour);
+  $('s-pt').textContent   = points();
+  $('s-sh').textContent   = shieldsAvailable() + ' 枚';
+  $('s-best').textContent = state.meta.bestStreak + ' 日';
+  $('s-used').textContent = state.shieldsConsumed.length + ' 日';
+  $('backup-note').textContent = state.meta.lastBackupAt
+    ? '前回のバックアップ：' + state.meta.lastBackupAt
+    : 'iOSは7日間開かれなかったアプリのデータを削除することがあります。定期的な書き出しを推奨します。';
+}
+function swap(list,i,j){ const a=list[i].order; list[i].order=list[j].order; list[j].order=a; }
+
+/* ============ 長押し ============ */
+const CIRC = 2 * Math.PI * 18;
+function attachPress(btn, done){
+  const prog = btn.querySelector('.prog');
+  prog.style.strokeDasharray = CIRC;
+  let raf = null, active = false, t0 = 0;
+
+  const set = p => { prog.style.strokeDashoffset = CIRC * (1-p); };
+  const step = ts => {
+    if(!active) return;
+    const p = Math.min(1, (ts - t0) / PRESS_MS);
+    set(p);
+    if(p >= 1){ active = false; set(0); done(); }
+    else raf = requestAnimationFrame(step);
+  };
+  const begin = e => { e.preventDefault(); active = true; t0 = performance.now(); raf = requestAnimationFrame(step); };
+  const end   = () => { active = false; if(raf) cancelAnimationFrame(raf); set(0); };
+
+  btn.addEventListener('pointerdown', begin);
+  btn.addEventListener('pointerup', end);
+  btn.addEventListener('pointercancel', end);
+  btn.addEventListener('pointerleave', end);
+  btn.addEventListener('contextmenu', e=>e.preventDefault());
+}
+
+/* ============ 過去日シート ============ */
+let sheetDate = null;
+function openSheet(date){
+  sheetDate = date;
+  const d = parseISO(date);
+  $('sheet-date').textContent = (d.getMonth()+1)+'月'+d.getDate()+'日（'+WD[d.getDay()]+'）';
+  renderSheet();
+  $('backdrop').classList.add('on');
+  requestAnimationFrame(()=> $('sheet').classList.add('on'));
+}
+function closeSheet(){
+  $('sheet').classList.remove('on');
+  setTimeout(()=> $('backdrop').classList.remove('on'), 200);
+}
+function renderSheet(){
+  const body = $('sheet-body');
+  const list = state.tasks.filter(x=>!x.archived).sort((a,b)=>a.order-b.order);
+  const cur = state.logs[sheetDate] || [];
+  body.innerHTML = '';
+
+  if(!list.length){ body.innerHTML = '<p class="note">タスクがありません。</p>'; return; }
+  list.forEach(task=>{
+    const on = cur.includes(task.id);
+    const el = document.createElement('div');
+    el.className = 'toggle' + (on ? ' on' : '');
+    el.innerHTML = '<span class="box">✓</span><span class="t"></span>';
+    el.querySelector('.t').textContent = task.name;
+    el.onclick = ()=>{ toggleTask(sheetDate, task.id); renderSheet(); render(); };
+    body.appendChild(el);
+  });
+
+  if(state.shieldsConsumed.includes(sheetDate)){
+    const p = document.createElement('p');
+    p.className = 'note';
+    p.textContent = 'この日はシールドで連続を維持しました。達成に変更するとシールドは返却されます。';
+    body.appendChild(p);
+  }
+}
+
+/* ============ バックアップ ============ */
+async function backup(){
+  const json = JSON.stringify(state, null, 2);
+  const name = 'ember-' + today() + '.json';
+  const file = new File([json], name, { type:'application/json' });
+
+  state.meta.lastBackupAt = today(); save();
+
+  // iOSでは共有シート経由が最も確実（「ファイルに保存」を選べる）
+  if(navigator.canShare && navigator.canShare({ files:[file] })){
+    try{ await navigator.share({ files:[file], title:name }); renderSettings(); return; }catch(e){ if(e.name==='AbortError'){ return; } }
+  }
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  renderSettings();
+}
+function restore(file){
+  const r = new FileReader();
+  r.onload = () => {
+    try{
+      const s = JSON.parse(r.result);
+      if(!s || typeof s !== 'object' || !('logs' in s)) throw new Error('形式が違います');
+      if(!confirm('現在のデータを上書きします。よろしいですか？')) return;
+      state = Object.assign(blank(), s);
+      save(); applyTheme(); render();
+      alert('復元しました。');
+    }catch(e){ alert('読み込めませんでした：' + e.message); }
+  };
+  r.readAsText(file);
+}
+
+/* ============ イベント ============ */
+$('nav-home').onclick = ()=>{
+  $('view-home').classList.remove('hidden'); $('view-settings').classList.add('hidden');
+  $('nav-home').classList.add('on'); $('nav-settings').classList.remove('on');
+  window.scrollTo(0,0);
+};
+$('nav-settings').onclick = ()=>{
+  $('view-settings').classList.remove('hidden'); $('view-home').classList.add('hidden');
+  $('nav-settings').classList.add('on'); $('nav-home').classList.remove('on');
+  window.scrollTo(0,0);
+};
+$('add-task').onclick = ()=>{
+  const input = $('new-task');
+  const name = input.value.trim();
+  if(!name) return;
+  const max = state.tasks.reduce((m,t)=>Math.max(m,t.order), -1);
+  state.tasks.push({ id:'t'+Date.now().toString(36), name, order:max+1, archived:false });
+  input.value = ''; input.blur(); save(); render();
+};
+$('new-task').addEventListener('keydown', e=>{ if(e.key==='Enter') $('add-task').click(); });
+$('theme').onchange = e=>{ state.settings.theme = e.target.value; save(); applyTheme(); };
+$('boundary').onchange = e=>{ state.settings.dayBoundaryHour = Number(e.target.value); save(); render(); };
+$('backup').onclick = backup;
+$('restore-btn').onclick = ()=> $('restore').click();
+$('restore').onchange = e=>{ if(e.target.files[0]) restore(e.target.files[0]); e.target.value=''; };
+$('backdrop').onclick = closeSheet;
+
+// バックグラウンドから復帰したとき、日付が変わっていれば作り直す
+let renderedDate = null;
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible' && today() !== renderedDate) boot();
+});
+
+/* ============ 起動 ============ */
+function boot(){
+  applyTheme();
+  processShields();
+  const s = streak();
+  if(s > state.meta.bestStreak){ state.meta.bestStreak = s; save(); }
+  renderedDate = today();
+  render();
+}
+boot();
+
+// 7日でのデータ削除を回避できる場合がある（保証はされない）
+if(navigator.storage && navigator.storage.persist) navigator.storage.persist();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>

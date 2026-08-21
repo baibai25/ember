@@ -1,0 +1,12 @@
+{
+  "name": "ember-tests",
+  "private": true,
+  "type": "module",
+  "description": "Ember のロジックを実際の index.html ごと jsdom で読み込んで検証する",
+  "scripts": {
+    "test": "node test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1"
+  }
+}

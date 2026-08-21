@@ -1,0 +1,443 @@
+<title>Ember Design Directions</title>
+<style>
+:root{
+  --bg:#FBFBFC; --panel:#FFFFFF; --ink:#14171C; --dim:#5D6470; --faint:#8A9099;
+  --line:#E4E7EC; --accent:#C2410C;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D0F13; --panel:#151920; --ink:#E9ECF1; --dim:#98A0AC; --faint:#6C7480;
+    --line:#252B35; --accent:#FB923C;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D0F13; --panel:#151920; --ink:#E9ECF1; --dim:#98A0AC; --faint:#6C7480;
+  --line:#252B35; --accent:#FB923C;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+  line-height:1.75;-webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px 96px}
+
+/* ---------- header ---------- */
+header{padding:80px 0 56px;border-bottom:1px solid var(--line);margin-bottom:56px}
+.eyebrow{font-size:12px;letter-spacing:.22em;color:var(--accent);font-weight:700;margin:0 0 18px}
+h1{font-size:clamp(34px,6vw,58px);line-height:1.12;letter-spacing:-.03em;margin:0 0 22px;font-weight:800}
+.lede{font-size:17px;color:var(--dim);max-width:64ch;margin:0}
+
+h2{font-size:13px;letter-spacing:.2em;color:var(--faint);font-weight:700;margin:0 0 24px}
+
+/* ---------- findings ---------- */
+.findings{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-bottom:26px}
+.find{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+.find h3{margin:0 0 7px;font-size:15px;letter-spacing:-.01em}
+.find p{margin:0;font-size:13.5px;color:var(--dim);line-height:1.7}
+.warn{
+  border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:0 12px 12px 0;padding:16px 20px;background:var(--panel);
+  font-size:14px;color:var(--dim);margin-bottom:72px;
+}
+.warn b{color:var(--ink)}
+
+/* ---------- options ---------- */
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:28px}
+.opt{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:26px;display:flex;flex-direction:column}
+.tag{
+  display:inline-block;font-size:11px;font-weight:700;letter-spacing:.14em;
+  color:var(--accent);margin-bottom:10px;
+}
+.opt h3{margin:0 0 6px;font-size:23px;letter-spacing:-.02em}
+.opt .sub{margin:0 0 22px;font-size:14px;color:var(--dim)}
+.stage{display:flex;justify-content:center;margin-bottom:22px}
+.opt dl{margin:0;font-size:13.5px;border-top:1px solid var(--line);padding-top:16px}
+.opt dt{font-weight:700;font-size:11px;letter-spacing:.12em;color:var(--faint);margin-bottom:3px}
+.opt dd{margin:0 0 12px;color:var(--dim);line-height:1.65}
+.opt dd:last-child{margin-bottom:0}
+
+/* ---------- phone shell ---------- */
+.phone{
+  width:290px;height:590px;border-radius:40px;overflow:hidden;position:relative;
+  box-shadow:0 1px 2px rgba(0,0,0,.14),0 18px 44px -12px rgba(0,0,0,.3);
+  font-size:14px;line-height:1.5;
+}
+.phone *{box-sizing:border-box}
+.notch{
+  position:absolute;top:9px;left:50%;transform:translateX(-50%);
+  width:86px;height:23px;border-radius:99px;background:rgba(0,0,0,.82);z-index:9;
+}
+.screen{position:absolute;inset:0;padding:52px 20px 0;overflow:hidden}
+.tabs{position:absolute;left:0;right:0;bottom:0;display:flex;font-size:12px;font-weight:600}
+.tabs span{flex:1;text-align:center;padding:13px 0 22px}
+
+/* ================= A. Editorial ================= */
+.ed{background:#FAF8F4;color:#15120E;font-family:ui-serif,"Hiragino Mincho ProN","Times New Roman",serif}
+.ed .rule{height:1px;background:#15120E;opacity:.16;margin:0}
+.ed .kicker{font-family:-apple-system,sans-serif;font-size:9px;letter-spacing:.3em;opacity:.45;margin:0 0 20px}
+.ed .num{font-size:108px;line-height:.82;letter-spacing:-.05em;font-weight:400;margin:0}
+.ed .unit{font-family:-apple-system,sans-serif;font-size:10px;letter-spacing:.34em;opacity:.5;margin:14px 0 22px}
+.ed .meta{display:flex;gap:20px;font-family:-apple-system,sans-serif;font-size:9.5px;letter-spacing:.1em;opacity:.5;margin:16px 0 22px}
+.ed .meta b{display:block;font-size:15px;letter-spacing:0;opacity:1;font-weight:600;margin-top:2px;color:#15120E}
+.ed .row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid rgba(21,18,14,.1);font-size:15px}
+.ed .row.on{color:#B03A1A}
+.ed .mark{font-family:-apple-system,sans-serif;font-size:11px;letter-spacing:.1em;opacity:.35}
+.ed .row.on .mark{opacity:1}
+.ed .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:22px}
+.ed .c{aspect-ratio:1;background:rgba(21,18,14,.07)}
+.ed .c.f{background:#15120E}
+.ed .c.s{background:none;box-shadow:inset 0 0 0 1.5px #B03A1A}
+.ed .tabs{background:#FAF8F4;border-top:1px solid rgba(21,18,14,.12);font-family:-apple-system,sans-serif}
+.ed .tabs span{opacity:.35}.ed .tabs span:first-child{opacity:1}
+
+/* ================= B. Ember Glow ================= */
+.gl{background:#0A0809;color:#F5EDE6}
+.gl .aura{
+  position:absolute;top:34px;left:50%;transform:translateX(-50%);
+  width:300px;height:300px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(249,115,22,.45) 0%,rgba(180,60,10,.16) 42%,transparent 68%);
+  filter:blur(14px);
+}
+.gl .screen{position:relative;z-index:2}
+.gl .num{
+  font-size:104px;line-height:1;font-weight:800;letter-spacing:-.05em;text-align:center;margin:26px 0 0;
+  background:linear-gradient(180deg,#FFF3E4 0%,#FDBA74 46%,#EA700C 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 22px rgba(249,115,22,.5));
+}
+.gl .unit{text-align:center;font-size:10px;letter-spacing:.38em;color:#B08968;margin:10px 0 20px}
+.gl .chips{display:flex;gap:7px;justify-content:center;margin-bottom:26px}
+.gl .chip{
+  background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.28);
+  border-radius:99px;padding:6px 11px;font-size:10px;color:#F0C9A0;
+}
+.gl .row{
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);
+  border-radius:14px;padding:13px 15px;margin-bottom:8px;font-size:14px;
+}
+.gl .row.on{
+  background:linear-gradient(100deg,rgba(249,115,22,.2),rgba(249,115,22,.05));
+  border-color:rgba(249,115,22,.42);
+  box-shadow:0 0 24px -6px rgba(249,115,22,.55);
+}
+.gl .dot{width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,.16)}
+.gl .row.on .dot{background:#F97316;border-color:#F97316;box-shadow:0 0 14px rgba(249,115,22,.9)}
+.gl .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:20px}
+.gl .c{aspect-ratio:1;border-radius:5px;background:rgba(255,255,255,.05)}
+.gl .c.f{background:#F97316;box-shadow:0 0 10px rgba(249,115,22,.65)}
+.gl .c.s{background:none;box-shadow:inset 0 0 0 1.5px #F59E0B}
+.gl .tabs{background:linear-gradient(180deg,transparent,#0A0809 42%);color:#6B5B50}
+.gl .tabs span:first-child{color:#FDBA74}
+
+/* ================= C. Bento ================= */
+.bt{background:#EFF0F3;color:#111418}
+.bt .screen{padding-top:46px}
+.bt .bento{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.bt .box{background:#fff;border-radius:19px;padding:15px;box-shadow:0 1px 2px rgba(16,24,40,.07)}
+.bt .span2{grid-column:span 2}
+.bt .lbl{font-size:9.5px;letter-spacing:.12em;color:#8A9099;font-weight:700;margin:0 0 5px}
+.bt .num{font-size:52px;line-height:1;font-weight:800;letter-spacing:-.04em;margin:0}
+.bt .num i{font-size:14px;font-style:normal;color:#8A9099;font-weight:600;margin-left:5px}
+.bt .big{font-size:25px;font-weight:800;margin:0;letter-spacing:-.02em}
+.bt .hero{background:linear-gradient(135deg,#FF8A3D,#EA580C);color:#fff}
+.bt .hero .lbl{color:rgba(255,255,255,.75)}
+.bt .hero .num i{color:rgba(255,255,255,.8)}
+.bt .row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #EEF0F3;font-size:13.5px}
+.bt .row:last-child{border-bottom:0}
+.bt .dot{width:20px;height:20px;border-radius:7px;border:2px solid #DFE2E7}
+.bt .row.on .dot{background:#16A34A;border-color:#16A34A}
+.bt .row.on{color:#8A9099}
+.bt .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.bt .c{aspect-ratio:1;border-radius:4px;background:#EDEFF2}
+.bt .c.f{background:#16A34A}
+.bt .c.s{background:none;box-shadow:inset 0 0 0 1.5px #EA580C}
+.bt .tabs{background:rgba(239,240,243,.9);backdrop-filter:blur(12px);color:#8A9099;border-top:1px solid #E2E5EA}
+.bt .tabs span:first-child{color:#111418}
+
+/* ================= D. Liquid Glass ================= */
+.lq{
+  color:#fff;
+  background:
+    radial-gradient(120% 80% at 8% 0%,#FF9A3D 0%,transparent 52%),
+    radial-gradient(110% 80% at 96% 14%,#C2410C 0%,transparent 48%),
+    radial-gradient(140% 100% at 50% 110%,#3B1D5E 0%,transparent 62%),
+    #1A1024;
+}
+.lq .panel{
+  background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.28);
+  backdrop-filter:blur(22px) saturate(180%);-webkit-backdrop-filter:blur(22px) saturate(180%);
+  border-radius:26px;padding:20px;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 10px 30px -10px rgba(0,0,0,.5);
+}
+.lq .num{font-size:78px;line-height:1;font-weight:800;letter-spacing:-.045em;margin:0;text-align:center;text-shadow:0 2px 18px rgba(0,0,0,.4)}
+.lq .unit{text-align:center;font-size:10px;letter-spacing:.34em;color:rgba(255,255,255,.82);margin:9px 0 0}
+.lq .chips{display:flex;gap:6px;justify-content:center;margin-top:16px}
+.lq .chip{background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.2);border-radius:99px;padding:5px 10px;font-size:10px}
+.lq .row{
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(255,255,255,.11);border:1px solid rgba(255,255,255,.22);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  border-radius:16px;padding:12px 15px;margin-bottom:7px;font-size:14px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3);
+}
+.lq .row.on{background:rgba(255,255,255,.24);border-color:rgba(255,255,255,.5)}
+.lq .dot{width:21px;height:21px;border-radius:50%;border:2px solid rgba(255,255,255,.5)}
+.lq .row.on .dot{background:#fff;border-color:#fff}
+.lq .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:14px}
+.lq .c{aspect-ratio:1;border-radius:5px;background:rgba(255,255,255,.16)}
+.lq .c.f{background:rgba(255,255,255,.95)}
+.lq .c.s{background:none;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.85)}
+.lq .tabbar{
+  position:absolute;left:22px;right:22px;bottom:20px;display:flex;
+  background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  border-radius:99px;padding:5px;box-shadow:inset 0 1px 0 rgba(255,255,255,.45);
+}
+.lq .tabbar span{flex:1;text-align:center;padding:9px 0;font-size:12px;font-weight:600;color:rgba(255,255,255,.72);border-radius:99px}
+.lq .tabbar span.on{background:rgba(255,255,255,.9);color:#7C2D12}
+
+/* ---------- footer ---------- */
+footer{margin-top:76px;padding-top:26px;border-top:1px solid var(--line);font-size:13px;color:var(--faint)}
+footer a{color:var(--dim);text-decoration:none;border-bottom:1px solid var(--line)}
+footer a:hover{color:var(--accent)}
+footer li{margin-bottom:5px}
+
+@media(max-width:520px){
+  header{padding:48px 0 36px;margin-bottom:40px}
+  .wrap{padding:0 16px 64px}
+  .opt{padding:20px}
+  .phone{width:262px;height:534px}
+}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">DESIGN DIRECTIONS</p>
+  <h1>Ember に着せる<br>4つのデザイン</h1>
+  <p class="lede">
+    どれも中身の設計は一切変えません。ストリークは1本、極小タスクで毎日をつなぐ、達成した日だけ大きく祝う ——
+    その構造の上に、違う服を着せた4案です。実機で見比べられるよう、iPhone の実寸に近いサイズで並べています。
+  </p>
+</header>
+
+<h2>調査でわかったこと</h2>
+<div class="findings">
+  <div class="find">
+    <h3>Liquid Glass</h3>
+    <p>Apple が WWDC 2025 で発表した、半透明と流体的な動きを組み合わせた表現。2026年の主流。ただし可読性の批判も多い。</p>
+  </div>
+  <div class="find">
+    <h3>ベントーグリッド</h3>
+    <p>弁当箱のように大小の箱で情報を仕切るレイアウト。数値を一目で把握させる用途と相性がよく、ウィジェット的に見える。</p>
+  </div>
+  <div class="find">
+    <h3>特大タイポグラフィ</h3>
+    <p>文字そのものを主役に据える。装飾ではなく寸法と余白で差をつけるので、流行に左右されにくく寿命が長い。</p>
+  </div>
+  <div class="find">
+    <h3>反応する色</h3>
+    <p>状態に応じて色が変化する設計。習慣アプリでは Everyday が有名で、連続日数が伸びるほど色が深くなる。</p>
+  </div>
+</div>
+
+<div class="warn">
+  <b>ひとつ注意点があります。</b>
+  Liquid Glass は 2026年で最も新しく見える一方、Nielsen Norman Group をはじめ多くの機関が可読性の低下を指摘しています。
+  半透明の背後に何が来るか制御できないため、コントラストが落ちて文字が沈む。
+  Ember は<b>朝晩の疲れた状態で一瞬だけ開くアプリ</b>なので、この弱点が効いてきます。採用するなら透明度は控えめに抑える前提です。
+</div>
+
+<h2>4つの案</h2>
+<div class="opts">
+
+  <!-- A -->
+  <section class="opt">
+    <span class="tag">A ／ 王道</span>
+    <h3>Editorial</h3>
+    <p class="sub">紙面のように、数字と余白だけで構成する</p>
+    <div class="stage">
+      <div class="phone ed">
+        <div class="notch"></div>
+        <div class="screen">
+          <p class="kicker">EMBER</p>
+          <p class="num">13</p>
+          <p class="unit">日連続</p>
+          <div class="rule"></div>
+          <div class="meta">
+            <span>自己ベスト<b>21日</b></span>
+            <span>シールド<b>2枚</b></span>
+            <span>次の1枚<b>あと2日</b></span>
+          </div>
+          <div class="row on"><span>スクワット10回</span><span class="mark">DONE</span></div>
+          <div class="row"><span>ストレッチ1分</span><span class="mark">—</span></div>
+          <div class="row"><span>懸垂</span><span class="mark">—</span></div>
+          <div class="grid">
+            <div class="c"></div><div class="c f"></div><div class="c f"></div><div class="c s"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div>
+            <div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div>
+            <div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c"></div><div class="c"></div><div class="c"></div><div class="c"></div>
+          </div>
+        </div>
+        <div class="tabs"><span>ホーム</span><span>設定</span></div>
+      </div>
+    </div>
+    <dl>
+      <dt>効くところ</dt>
+      <dd>流行の要素がゼロなので古びません。色に頼らない分、毎日見ても疲れない。今のコードからの変更が最も小さく、実質フォントと余白の調整だけで到達します。</dd>
+      <dt>弱いところ</dt>
+      <dd>達成したときの快感が薄い。押した瞬間の報酬が「静かな満足」止まりになるので、続ける動機としては弱くなる可能性があります。</dd>
+      <dt>実装</dt>
+      <dd>半日</dd>
+    </dl>
+  </section>
+
+  <!-- B -->
+  <section class="opt">
+    <span class="tag">B ／ 名前に忠実</span>
+    <h3>Ember Glow</h3>
+    <p class="sub">連続日数が伸びるほど、火が強く光る</p>
+    <div class="stage">
+      <div class="phone gl">
+        <div class="notch"></div>
+        <div class="aura"></div>
+        <div class="screen">
+          <p class="num">13</p>
+          <p class="unit">日連続</p>
+          <div class="chips">
+            <span class="chip">自己ベスト 21</span>
+            <span class="chip">シールド 2</span>
+            <span class="chip">次まで 2日</span>
+          </div>
+          <div class="row on"><span>スクワット10回</span><span class="dot"></span></div>
+          <div class="row"><span>ストレッチ1分</span><span class="dot"></span></div>
+          <div class="row"><span>懸垂</span><span class="dot"></span></div>
+          <div class="grid">
+            <div class="c"></div><div class="c f"></div><div class="c f"></div><div class="c s"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div>
+            <div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div>
+            <div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c"></div><div class="c"></div><div class="c"></div><div class="c"></div>
+          </div>
+        </div>
+        <div class="tabs"><span>ホーム</span><span>設定</span></div>
+      </div>
+    </div>
+    <dl>
+      <dt>効くところ</dt>
+      <dd>唯一、名前と意味がつながっている案です。<b>グローの強さを連続日数に連動</b>させられるので、数字を読まなくても積み上げが体感できます。達成した瞬間に画面が温まるのは、報酬として素直に強い。</dd>
+      <dt>弱いところ</dt>
+      <dd>暗い画面が前提なので、ライトモードでは成立しません。ダーク固定にする割り切りが要ります。</dd>
+      <dt>実装</dt>
+      <dd>1日</dd>
+    </dl>
+  </section>
+
+  <!-- C -->
+  <section class="opt">
+    <span class="tag">C ／ 2026の流行</span>
+    <h3>Bento</h3>
+    <p class="sub">箱で仕切って、全部を一目で</p>
+    <div class="stage">
+      <div class="phone bt">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="bento">
+            <div class="box span2 hero">
+              <p class="lbl">連続</p>
+              <p class="num">13<i>日</i></p>
+            </div>
+            <div class="box">
+              <p class="lbl">自己ベスト</p>
+              <p class="big">21日</p>
+            </div>
+            <div class="box">
+              <p class="lbl">シールド</p>
+              <p class="big">2枚</p>
+            </div>
+            <div class="box span2">
+              <p class="lbl">今日やったこと</p>
+              <div class="row on"><span>スクワット10回</span><span class="dot"></span></div>
+              <div class="row"><span>ストレッチ1分</span><span class="dot"></span></div>
+              <div class="row"><span>懸垂</span><span class="dot"></span></div>
+            </div>
+            <div class="box span2">
+              <p class="lbl">直近5週間</p>
+              <div class="grid">
+                <div class="c"></div><div class="c f"></div><div class="c f"></div><div class="c s"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div>
+                <div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div>
+                <div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c"></div><div class="c"></div><div class="c"></div><div class="c"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="tabs"><span>ホーム</span><span>設定</span></div>
+      </div>
+    </div>
+    <dl>
+      <dt>効くところ</dt>
+      <dd>スクロールなしで全情報が入ります。箱の構造がそのまま iOS のウィジェットに転用できるので、将来ホーム画面に出したくなったとき無駄になりません。</dd>
+      <dt>弱いところ</dt>
+      <dd>情報が均等に並ぶぶん、<b>何が主役か弱まります</b>。「達成した日だけ大きく祝う」というこのアプリの核が薄まる方向で、設計思想とは少し逆を向いています。</dd>
+      <dt>実装</dt>
+      <dd>1〜2日</dd>
+    </dl>
+  </section>
+
+  <!-- D -->
+  <section class="opt">
+    <span class="tag">D ／ 最も今っぽい</span>
+    <h3>Liquid Glass</h3>
+    <p class="sub">iOS 26 の純正アプリに並べても浮かない</p>
+    <div class="stage">
+      <div class="phone lq">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="panel">
+            <p class="num">13</p>
+            <p class="unit">日連続</p>
+            <div class="chips">
+              <span class="chip">ベスト 21</span>
+              <span class="chip">シールド 2</span>
+              <span class="chip">次まで 2日</span>
+            </div>
+          </div>
+          <div style="height:16px"></div>
+          <div class="row on"><span>スクワット10回</span><span class="dot"></span></div>
+          <div class="row"><span>ストレッチ1分</span><span class="dot"></span></div>
+          <div class="row"><span>懸垂</span><span class="dot"></span></div>
+          <div class="grid">
+            <div class="c"></div><div class="c f"></div><div class="c f"></div><div class="c s"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div>
+            <div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div><div class="c f"></div>
+          </div>
+        </div>
+        <div class="tabbar"><span class="on">ホーム</span><span>設定</span></div>
+      </div>
+    </div>
+    <dl>
+      <dt>効くところ</dt>
+      <dd>ホーム画面から開いたとき、自作アプリに見えません。背景のグラデーションを連続日数で変化させれば、Bの「反応する色」も両立できます。</dd>
+      <dt>弱いところ</dt>
+      <dd>可読性が落ちます。半透明の背後が明るいと文字が沈むため、疲れて一瞬だけ開く用途とは相性が悪い。加えて<b>最も流行に紐づいているので、最も早く古びます</b>。</dd>
+      <dt>実装</dt>
+      <dd>1日</dd>
+    </dl>
+  </section>
+
+</div>
+
+<footer>
+  <p>参考にした情報：</p>
+  <ul>
+    <li><a href="https://www.nngroup.com/articles/liquid-glass/">Liquid Glass Is Cracked, and Usability Suffers in iOS 26 — Nielsen Norman Group</a></li>
+    <li><a href="https://openforge.io/what-is-ios-liquid-glass-design/">What Is Liquid Glass and How Will It Impact Mobile App UI in 2026? — OpenForge</a></li>
+    <li><a href="https://www.designstudiouiux.com/blog/mobile-app-ui-ux-design-trends/">13 Mobile App UI/UX Design Trends to Watch in 2026 — DesignStudio</a></li>
+    <li><a href="https://www.fontfabric.com/blog/10-design-trends-shaping-the-visual-typographic-landscape-in-2026/">Top 10 Design &amp; Typography Trends for 2026 — Fontfabric</a></li>
+    <li><a href="https://habi.app/insights/best-streak-tracker-apps/">7 Best Streak Tracker Apps in 2026 — Habi</a></li>
+    <li><a href="https://infinum.com/blog/apples-ios-26-liquid-glass-sleek-shiny-and-questionably-accessible/">Apple's iOS 26 Liquid Glass: Sleek, Shiny, and Questionably Accessible — Infinum</a></li>
+  </ul>
+</footer>
+
+</div>

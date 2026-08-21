@@ -1,0 +1,218 @@
+<title>Ember Icon Options</title>
+<style>
+:root{
+  --bg:#FAF8F4; --panel:#fff; --ink:#15120E; --dim:#8B857C; --rule:rgba(21,18,14,.13);
+  --ember:#B03A1A; color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0A0809; --panel:rgba(255,255,255,.04); --ink:#F3EBE3; --dim:#8B7B6E;
+    --rule:rgba(255,255,255,.1); --ember:#F97316; color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;line-height:1.7}
+.wrap{max-width:940px;margin:0 auto;padding:0 22px 90px}
+header{padding:64px 0 34px;border-bottom:1px solid var(--rule);margin-bottom:44px}
+.mast{font-size:9.5px;letter-spacing:.36em;color:var(--dim);margin:0 0 20px}
+h1{font-size:clamp(28px,5vw,44px);letter-spacing:-.03em;margin:0 0 16px;font-weight:800}
+.lede{color:var(--dim);font-size:15px;max-width:62ch;margin:0}
+h2{font-size:10px;letter-spacing:.2em;color:var(--dim);font-weight:700;margin:52px 0 18px;
+  padding-bottom:12px;border-bottom:1px solid var(--rule)}
+
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:14px;padding:20px 18px;text-align:center}
+.code{font-size:10px;letter-spacing:.16em;color:var(--ember);font-weight:700;margin:0 0 14px}
+.big{display:flex;justify-content:center;align-items:center;height:80px}
+.big svg{width:62px;height:62px}
+.real{display:flex;justify-content:center;align-items:center;gap:9px;margin-top:14px;
+  padding-top:14px;border-top:1px solid var(--rule);color:var(--dim);font-size:10px;letter-spacing:.1em}
+.real svg{width:23px;height:23px}
+.name{font-size:14px;font-weight:600;margin:12px 0 4px}
+.desc{font-size:11.5px;color:var(--dim);margin:0;line-height:1.65}
+svg{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.big svg{stroke-width:1.4}
+
+/* nav preview */
+.previews{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin-top:8px}
+.pv{border:1px solid var(--rule);border-radius:16px;overflow:hidden;background:var(--panel)}
+.pv .cap{font-size:11px;color:var(--dim);padding:12px 16px;border-bottom:1px solid var(--rule);letter-spacing:.08em}
+.nav{display:flex;background:var(--bg)}
+.nav button{flex:1;background:none;border:0;color:var(--dim);display:flex;flex-direction:column;
+  align-items:center;gap:5px;padding:12px 0 14px;font-size:10px;font-weight:600;letter-spacing:.14em;font-family:inherit}
+.nav button svg{width:23px;height:23px}
+.nav button.on{color:var(--ink)}
+.nav button.on svg{stroke-width:1.9}
+footer{margin-top:64px;padding-top:22px;border-top:1px solid var(--rule);font-size:12.5px;color:var(--dim)}
+</style>
+
+<!-- ========== アイコン定義 ========== -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- ホーム -->
+    <g id="i-house">
+      <path d="M3.4 10.3 12 3.4l8.6 6.9"/><path d="M5.6 8.9v10.7h12.8V8.9"/><path d="M9.7 19.6v-5.9h4.6v5.9"/>
+    </g>
+    <g id="i-flame">
+      <path d="M12 2.6s6 4.7 6 9.6a6 6 0 0 1-12 0c0-2 .9-3.7 2.2-5.2.4 1.3 1.1 2.1 2 2.5-.4-2.7.3-5.1 1.8-6.9Z"/>
+      <path d="M12 20.6a3 3 0 0 0 3-3c0-2.1-3-4.4-3-4.4s-3 2.3-3 4.4a3 3 0 0 0 3 3Z"/>
+    </g>
+    <g id="i-ring">
+      <path d="M16.08 4.32A8.7 8.7 0 1 1 8.19 4.18"/>
+      <circle cx="12" cy="12" r="2.7"/>
+    </g>
+    <g id="i-grid">
+      <rect x="2.6" y="2.6" width="5.4" height="5.4" rx="1.3"/>
+      <rect x="9.3" y="2.6" width="5.4" height="5.4" rx="1.3"/>
+      <rect x="16" y="2.6" width="5.4" height="5.4" rx="1.3"/>
+      <rect x="2.6" y="9.3" width="5.4" height="5.4" rx="1.3"/>
+      <rect x="9.3" y="9.3" width="5.4" height="5.4" rx="1.3"/>
+      <rect x="2.6" y="16" width="5.4" height="5.4" rx="1.3"/>
+    </g>
+
+    <!-- 設定 -->
+    <g id="i-gear8">
+      <path d="M9.77 4.94 9.95 1.91 14.05 1.91 14.23 4.94 15.42 5.44 17.68 3.41 20.59 6.32 18.56 8.58 19.06 9.77 22.09 9.95 22.09 14.05 19.06 14.23 18.56 15.42 20.59 17.68 17.68 20.59 15.42 18.56 14.23 19.06 14.05 22.09 9.95 22.09 9.77 19.06 8.58 18.56 6.32 20.59 3.41 17.68 5.44 15.42 4.94 14.23 1.91 14.05 1.91 9.95 4.94 9.77 5.44 8.58 3.41 6.32 6.32 3.41 8.58 5.44Z"/>
+      <circle cx="12" cy="12" r="3.1"/>
+    </g>
+    <g id="i-gear6">
+      <path d="M8.93 4.40 9.36 2.15 14.64 2.15 15.07 4.40 17.05 5.54 19.21 4.79 21.85 9.36 20.12 10.86 20.12 13.14 21.85 14.64 19.21 19.21 17.05 18.46 15.07 19.60 14.64 21.85 9.36 21.85 8.93 19.60 6.95 18.46 4.79 19.21 2.15 14.64 3.88 13.14 3.88 10.86 2.15 9.36 4.79 4.79 6.95 5.54Z"/>
+      <circle cx="12" cy="12" r="3.2"/>
+    </g>
+    <g id="i-slider">
+      <path d="M3.2 6.6h6.1M14.1 6.6h6.7"/><circle cx="11.7" cy="6.6" r="2.4"/>
+      <path d="M3.2 12h1.9M9.9 12h10.9"/><circle cx="7.5" cy="12" r="2.4"/>
+      <path d="M3.2 17.4h10.9M18.9 17.4h1.9"/><circle cx="16.5" cy="17.4" r="2.4"/>
+    </g>
+    <g id="i-fader">
+      <path d="M6.6 3.2v6.1M6.6 14.1v6.7"/><circle cx="6.6" cy="11.7" r="2.4"/>
+      <path d="M12 3.2v1.9M12 9.9v10.9"/><circle cx="12" cy="7.5" r="2.4"/>
+      <path d="M17.4 3.2v10.9M17.4 18.9v1.9"/><circle cx="17.4" cy="16.5" r="2.4"/>
+    </g>
+    <g id="i-dots">
+      <circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/>
+    </g>
+  </defs>
+</svg>
+
+<div class="wrap">
+
+<header>
+  <p class="mast">EMBER</p>
+  <h1>アイコン候補</h1>
+  <p class="lede">
+    ホーム側4案、設定側5案です。実寸（23px）でも並べているので、ホーム画面での見え方はそちらで判断してください。
+    好きな組み合わせを選べます。番号で指定いただければ差し替えます。
+  </p>
+</header>
+
+<h2>ホーム</h2>
+<div class="row">
+  <div class="card">
+    <p class="code">H1</p>
+    <div class="big"><svg viewBox="0 0 24 24"><use href="#i-house"/></svg></div>
+    <p class="name">家</p>
+    <p class="desc">最も一般的。何も考えずに理解できる代わり、このアプリらしさはない</p>
+    <div class="real"><svg viewBox="0 0 24 24"><use href="#i-house"/></svg>実寸</div>
+  </div>
+  <div class="card">
+    <p class="code">H2</p>
+    <div class="big"><svg viewBox="0 0 24 24"><use href="#i-flame"/></svg></div>
+    <p class="name">炎</p>
+    <p class="desc">Ember という名前と直結する。連続日数の画面なので意味も合う</p>
+    <div class="real"><svg viewBox="0 0 24 24"><use href="#i-flame"/></svg>実寸</div>
+  </div>
+  <div class="card">
+    <p class="code">H3</p>
+    <div class="big"><svg viewBox="0 0 24 24"><use href="#i-ring"/></svg></div>
+    <p class="name">熾火の輪</p>
+    <p class="desc">アプリアイコンと同じモチーフ。閉じていない輪は「まだ続いている」の意味</p>
+    <div class="real"><svg viewBox="0 0 24 24"><use href="#i-ring"/></svg>実寸</div>
+  </div>
+  <div class="card">
+    <p class="code">H4</p>
+    <div class="big"><svg viewBox="0 0 24 24"><use href="#i-grid"/></svg></div>
+    <p class="name">記録グリッド</p>
+    <p class="desc">カレンダーの草をそのまま図案化。画面の中身を直接示す</p>
+    <div class="real"><svg viewBox="0 0 24 24"><use href="#i-grid"/></svg>実寸</div>
+  </div>
+</div>
+
+<h2>設定</h2>
+<div class="row">
+  <div class="card">
+    <p class="code">S1</p>
+    <div class="big"><svg viewBox="0 0 24 24"><use href="#i-gear8"/></svg></div>
+    <p class="name">歯車・8歯（現状）</p>
+    <p class="desc">歯が深く、やや重い。実寸だと潰れ気味に見える</p>
+    <div class="real"><svg viewBox="0 0 24 24"><use href="#i-gear8"/></svg>実寸</div>
+  </div>
+  <div class="card">
+    <p class="code">S2</p>
+    <div class="big"><svg viewBox="0 0 24 24"><use href="#i-gear6"/></svg></div>
+    <p class="name">歯車・6歯</p>
+    <p class="desc">歯を浅く広くして軽くしたもの。歯車のまま線が減る</p>
+    <div class="real"><svg viewBox="0 0 24 24"><use href="#i-gear6"/></svg>実寸</div>
+  </div>
+  <div class="card">
+    <p class="code">S3</p>
+    <div class="big"><svg viewBox="0 0 24 24"><use href="#i-slider"/></svg></div>
+    <p class="name">スライダー</p>
+    <p class="desc">「調整する」の意味。直線主体なので Editorial の細い罫線と相性がいい</p>
+    <div class="real"><svg viewBox="0 0 24 24"><use href="#i-slider"/></svg>実寸</div>
+  </div>
+  <div class="card">
+    <p class="code">S4</p>
+    <div class="big"><svg viewBox="0 0 24 24"><use href="#i-fader"/></svg></div>
+    <p class="name">フェーダー（縦）</p>
+    <p class="desc">同じ意味を縦組みで。ホーム側の家や炎と縦線の向きが揃う</p>
+    <div class="real"><svg viewBox="0 0 24 24"><use href="#i-fader"/></svg>実寸</div>
+  </div>
+  <div class="card">
+    <p class="code">S5</p>
+    <div class="big"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg></div>
+    <p class="name">点3つ</p>
+    <p class="desc">最小の線数。ただし「その他」に見えるので、設定としては弱い</p>
+    <div class="real"><svg viewBox="0 0 24 24"><use href="#i-dots"/></svg>実寸</div>
+  </div>
+</div>
+
+<h2>組み合わせプレビュー</h2>
+<div class="previews">
+  <div class="pv">
+    <p class="cap">H2 ＋ S3 ／ 炎とスライダー（おすすめ）</p>
+    <div class="nav">
+      <button class="on"><svg viewBox="0 0 24 24"><use href="#i-flame"/></svg>ホーム</button>
+      <button><svg viewBox="0 0 24 24"><use href="#i-slider"/></svg>設定</button>
+    </div>
+  </div>
+  <div class="pv">
+    <p class="cap">H3 ＋ S2 ／ 熾火の輪と6歯</p>
+    <div class="nav">
+      <button class="on"><svg viewBox="0 0 24 24"><use href="#i-ring"/></svg>ホーム</button>
+      <button><svg viewBox="0 0 24 24"><use href="#i-gear6"/></svg>設定</button>
+    </div>
+  </div>
+  <div class="pv">
+    <p class="cap">H1 ＋ S2 ／ 家と6歯（最も無難）</p>
+    <div class="nav">
+      <button class="on"><svg viewBox="0 0 24 24"><use href="#i-house"/></svg>ホーム</button>
+      <button><svg viewBox="0 0 24 24"><use href="#i-gear6"/></svg>設定</button>
+    </div>
+  </div>
+  <div class="pv">
+    <p class="cap">H4 ＋ S4 ／ グリッドとフェーダー</p>
+    <div class="nav">
+      <button class="on"><svg viewBox="0 0 24 24"><use href="#i-grid"/></svg>ホーム</button>
+      <button><svg viewBox="0 0 24 24"><use href="#i-fader"/></svg>設定</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  すべて線幅1.5pxの線画で、選択中は1.9pxに太らせています。色は文字色を継承するので、テーマを切り替えても自動で追従します。
+  このページ自体もライト／ダークに対応しているので、端末の設定を切り替えて両方で確認してください。
+</footer>
+
+</div>

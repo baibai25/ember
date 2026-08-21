@@ -1,0 +1,149 @@
+<title>Ember App Icon Options</title>
+<style>
+:root{
+  --bg:#FAF8F4; --panel:#fff; --ink:#15120E; --dim:#8B857C;
+  --rule:rgba(21,18,14,.13); --ember:#A8300F; color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0A0809; --panel:rgba(255,255,255,.04); --ink:#F3EBE3; --dim:#8B7B6E;
+    --rule:rgba(255,255,255,.1); --ember:#F97316; color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);line-height:1.7;
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:0 22px 90px}
+header{padding:64px 0 34px;border-bottom:1px solid var(--rule);margin-bottom:40px}
+.mast{font-size:9.5px;letter-spacing:.36em;color:var(--dim);margin:0 0 20px}
+h1{font-size:clamp(28px,5vw,44px);letter-spacing:-.03em;margin:0 0 16px;font-weight:800}
+.lede{color:var(--dim);font-size:15px;max-width:62ch;margin:0}
+h2{font-size:10px;letter-spacing:.2em;color:var(--dim);font-weight:700;margin:52px 0 18px;
+  padding-bottom:12px;border-bottom:1px solid var(--rule)}
+
+/* ホーム画面シミュレーション */
+.springboard{
+  border-radius:22px;padding:30px 22px 24px;
+  background:linear-gradient(160deg,#5B6B8A 0%,#7E7391 40%,#B08A79 100%);
+  overflow-x:auto;
+}
+.sbrow{display:flex;gap:20px;min-width:max-content;justify-content:center}
+.sbapp{width:66px;text-align:center;flex:none}
+.sbapp img,.sbapp .stub{width:60px;height:60px;border-radius:13.4px;display:block;margin:0 auto 6px}
+.sbapp .stub{background:rgba(255,255,255,.24);border:1px solid rgba(255,255,255,.3)}
+.sbapp span{font-size:10px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.5);display:block;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sbcap{font-size:11.5px;color:var(--dim);margin:12px 0 0;text-align:center}
+
+/* 詳細カード */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:16px;padding:22px;display:flex;gap:18px}
+.card img{width:104px;height:104px;border-radius:23.2px;flex:none;
+  box-shadow:0 1px 2px rgba(0,0,0,.16),0 8px 20px -8px rgba(0,0,0,.3)}
+.card .body{flex:1;min-width:0}
+.code{font-size:10px;letter-spacing:.16em;color:var(--ember);font-weight:700;margin:0 0 6px}
+.name{font-size:17px;font-weight:700;margin:0 0 8px;letter-spacing:-.01em}
+.desc{font-size:12.5px;color:var(--dim);margin:0 0 10px;line-height:1.7}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font-size:10px;border:1px solid var(--rule);border-radius:99px;padding:3px 9px;color:var(--dim)}
+.tag.good{border-color:var(--ember);color:var(--ember)}
+
+footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--rule);font-size:12.5px;color:var(--dim)}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="mast">EMBER</p>
+  <h1>アプリアイコン候補</h1>
+  <p class="lede">
+    6案です。アイコンは拡大して眺めるものではないので、まず一番上の「ホーム画面での見え方」で判断してください。
+    実寸60pxで、iOSと同じ角丸を当てて、壁紙の上に並べてあります。番号で指定いただければ差し替えます。
+  </p>
+</header>
+
+<h2>ホーム画面での見え方（実寸60px）</h2>
+<div class="springboard">
+  <div class="sbrow">
+    <div class="sbapp"><img src="icon-options/a-512.png" alt="A"><span>A 熾火の輪</span></div>
+    <div class="sbapp"><img src="icon-options/b-512.png" alt="B"><span>B 輪・紙地</span></div>
+    <div class="sbapp"><img src="icon-options/c-512.png" alt="C"><span>C E</span></div>
+    <div class="sbapp"><img src="icon-options/d-512.png" alt="D"><span>D 炎</span></div>
+    <div class="sbapp"><img src="icon-options/e-512.png" alt="E"><span>E 一点</span></div>
+    <div class="sbapp"><img src="icon-options/f-512.png" alt="F"><span>F グリッド</span></div>
+    <div class="sbapp"><div class="stub"></div><span>他アプリ</span></div>
+  </div>
+  <p class="sbcap" style="color:rgba(255,255,255,.85)">壁紙の上に並べた状態。周囲のアプリに埋もれないかを見てください</p>
+</div>
+
+<h2>それぞれの狙い</h2>
+<div class="grid">
+
+  <div class="card">
+    <img src="icon-options/a-512.png" alt="A">
+    <div class="body">
+      <p class="code">A</p>
+      <p class="name">熾火の輪（現状）</p>
+      <p class="desc">閉じていない輪と、中心で光る熾火。輪が閉じないのは「まだ終わっていない」という意味です。上部が暗く、下部が明るいのは、火が回っていく途中を表しています。</p>
+      <div class="tags"><span class="tag good">意味が最も濃い</span><span class="tag">暗い分やや地味</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <img src="icon-options/b-512.png" alt="B">
+    <div class="body">
+      <p class="code">B</p>
+      <p class="name">輪・紙地</p>
+      <p class="desc">Aと同じ図案を、ライトテーマの紙色に載せたもの。アプリを開いたときの画面と地の色が一致するので、起動の瞬間につながりが生まれます。</p>
+      <div class="tags"><span class="tag good">アプリ内と地続き</span><span class="tag good">明るく目立つ</span><span class="tag">白いアイコンは多い</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <img src="icon-options/c-512.png" alt="C">
+    <div class="body">
+      <p class="code">C</p>
+      <p class="name">モノグラム E</p>
+      <p class="desc">セリフ体の頭文字と、下の細い罫線。Editorial のデザインをそのままアイコンに落としたものです。絵で説明せず、文字だけで立たせています。</p>
+      <div class="tags"><span class="tag good">デザインと完全に一致</span><span class="tag">何のアプリか分からない</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <img src="icon-options/d-512.png" alt="D">
+    <div class="body">
+      <p class="code">D</p>
+      <p class="name">炎</p>
+      <p class="desc">最も直球。暖色の地に白抜きの炎で、遠目でも何のアプリか分かります。ホーム画面で最も見つけやすいのはこれです。</p>
+      <div class="tags"><span class="tag good">視認性が最高</span><span class="tag">ありふれた図案</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <img src="icon-options/e-512.png" alt="E">
+    <div class="body">
+      <p class="code">E</p>
+      <p class="name">一点</p>
+      <p class="desc">暗闇に灯る火種ひとつ。輪も文字もなく、光だけ。Ember という言葉の最短の翻訳です。</p>
+      <div class="tags"><span class="tag good">最もそぎ落とされている</span><span class="tag">意味は伝わりにくい</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <img src="icon-options/f-512.png" alt="F">
+    <div class="body">
+      <p class="code">F</p>
+      <p class="name">記録グリッド</p>
+      <p class="desc">アプリ内のカレンダーをそのまま図案化。1マスだけ空いているのは「今日はまだ終わっていない」を表しています。アイコンを見た瞬間に埋めたくなる、という仕掛けです。</p>
+      <div class="tags"><span class="tag good">用途が一目で分かる</span><span class="tag good">空きマスが行動を促す</span></div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  すべて 192px と 512px を生成済みです。選ばれたものを <code>icon-192.png</code> / <code>icon-512.png</code> として本体に差し替えます。
+  このページ自体もライト／ダークに対応しているので、端末の設定を切り替えて両方で確認してください。
+</footer>
+
+</div>

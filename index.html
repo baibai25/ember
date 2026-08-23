@@ -166,6 +166,9 @@ h2{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.2em;margin:
 .gridhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
 .gridhead h2{margin:0}
 .gridhead .range{font-size:10px;letter-spacing:.1em;color:var(--muted);font-variant-numeric:tabular-nums}
+.gridnav{display:flex;align-items:center;gap:8px}
+.navbtn{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;width:26px;height:26px;padding:0;font-size:13px;line-height:1;flex:none;cursor:pointer}
+.navbtn:disabled{opacity:.25;cursor:default}
 .wd{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
 .wd span{text-align:center;font-size:8.5px;letter-spacing:.1em;color:var(--muted)}
 .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
@@ -256,7 +259,7 @@ nav button.on svg{stroke-width:1.9}
     </section>
 
     <section class="gridwrap">
-      <div class="gridhead"><h2 id="grid-title"></h2><span class="range" id="range"></span></div>
+      <div class="gridhead"><h2 id="grid-title"></h2><div class="gridnav"><span class="range" id="range"></span><button class="navbtn" id="grid-prev" aria-label="前の月">‹</button><button class="navbtn" id="grid-next" aria-label="次の月">›</button></div></div>
       <div class="wd"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
       <div class="grid" id="grid"></div>
       <div class="legend">
@@ -401,6 +404,9 @@ function iso(d){
 }
 function parseISO(s){ const p=s.split('-').map(Number); return new Date(p[0],p[1]-1,p[2]); }
 function addDays(s,n){ const d=parseISO(s); d.setDate(d.getDate()+n); return iso(d); }
+function ym(s){ return s.slice(0,7); }
+function ymShift(s,n){ const p=s.split('-').map(Number); const d=new Date(p[0],p[1]-1+n,1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 /** 午前4時区切りを反映した「今日」 */
 function today(){
   return iso(new Date(Date.now() - state.settings.dayBoundaryHour*3600000));
@@ -596,17 +602,32 @@ function renderTasks(){
   });
 }
 
+/** 表示中の月（YYYY-MM）。起動時と日付が変わったときは今月に戻す */
+let gridMonth = null;
+
+/** 記録が残っている最も古い月。1件もなければ今月 */
+function firstRecordMonth(){
+  const dates = Object.keys(state.logs).filter(isDone).concat(state.shieldsConsumed);
+  return ym(dates.reduce((min,d)=> d < min ? d : min, today()));
+}
+
 function renderGrid(){
   const t = today(), grid = $('grid');
   const consumed = new Set(state.shieldsConsumed);
 
-  // 今日が属する月のカレンダー。月めくりはしない
-  const td = parseISO(t);
-  const y = td.getFullYear(), m = td.getMonth();
-  const firstDow = new Date(y, m, 1).getDay();
+  // 記録のある月より前と、来月以降には行けない
+  const cur = ym(t), min = firstRecordMonth();
+  if(!gridMonth || gridMonth > cur) gridMonth = cur;
+  if(gridMonth < min) gridMonth = min;
+
+  const p = gridMonth.split('-').map(Number);
+  const y = p[0], m = p[1] - 1;
+  const firstDow = new Date(y, m, 1).getDay(); // 0=日曜。カレンダーは日曜始まり
   const days = new Date(y, m+1, 0).getDate();
   $('grid-title').textContent = (m+1) + '月';
   $('range').textContent = y + '年';
+  $('grid-prev').disabled = gridMonth <= min;
+  $('grid-next').disabled = gridMonth >= cur;
 
   grid.innerHTML = '';
   const pad = n => { for(let i=0;i<n;i++){ const c=document.createElement('div'); c.className='cell pad'; grid.appendChild(c); } };
@@ -791,6 +812,8 @@ $('backup').onclick = backup;
 $('restore-btn').onclick = ()=> $('restore').click();
 $('restore').onchange = e=>{ if(e.target.files[0]) restore(e.target.files[0]); e.target.value=''; };
 $('backdrop').onclick = closeSheet;
+$('grid-prev').onclick = ()=>{ gridMonth = ymShift(gridMonth,-1); renderGrid(); };
+$('grid-next').onclick = ()=>{ gridMonth = ymShift(gridMonth,+1); renderGrid(); };
 
 // バックグラウンドから復帰したとき、日付が変わっていれば作り直す
 let renderedDate = null;
@@ -801,6 +824,7 @@ document.addEventListener('visibilitychange', ()=>{
 /* ============ 起動 ============ */
 function boot(){
   applyTheme();
+  gridMonth = null;
   processShields();
   const s = streak();
   if(s > state.meta.bestStreak){ state.meta.bestStreak = s; save(); }

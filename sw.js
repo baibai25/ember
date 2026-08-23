@@ -1,6 +1,6 @@
 // Ember - オフライン用サービスワーカー
 // 中身を更新したら CACHE の版数を上げること
-const CACHE = 'ember-v2';
+const CACHE = 'ember-v3';
 const ASSETS = ['./', './index.html', './manifest.json', './assets/icon-192.png', './assets/icon-512.png'];
 
 self.addEventListener('install', e => {

@@ -1,6 +1,7 @@
 // Ember - オフライン用サービスワーカー
-// 中身を更新したら CACHE の版数を上げること
-const CACHE = 'ember-v3';
+// ネットワーク優先で毎回キャッシュを上書きするため、更新のたびに版数を上げる必要はない。
+// キャッシュを丸ごと捨てたいとき（ASSETS の URL を変えた、壊れた応答が残った等）だけ上げる
+const CACHE = 'ember-v1';
 const ASSETS = ['./', './index.html', './manifest.json', './assets/icon-192.png', './assets/icon-512.png'];
 
 self.addEventListener('install', e => {

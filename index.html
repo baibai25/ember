@@ -178,7 +178,7 @@ h2{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.2em;margin:
 .cell.shield{background:transparent;box-shadow:inset 0 0 0 1.5px var(--gold);color:var(--gold)}
 .cell.future{opacity:.3;pointer-events:none}
 .cell.today{outline:1px solid var(--text);outline-offset:2px}
-.cell .mon{font-size:8px;font-weight:700;letter-spacing:-.03em}
+.cell.pad{background:transparent;box-shadow:none;pointer-events:none}
 .legend{display:flex;gap:16px;justify-content:center;margin-top:18px;font-size:9.5px;letter-spacing:.08em;color:var(--muted)}
 .legend i{width:9px;height:9px;border-radius:2px;display:inline-block;vertical-align:0;margin-right:6px}
 
@@ -256,7 +256,7 @@ nav button.on svg{stroke-width:1.9}
     </section>
 
     <section class="gridwrap">
-      <div class="gridhead"><h2>直近5週間</h2><span class="range" id="range"></span></div>
+      <div class="gridhead"><h2 id="grid-title"></h2><span class="range" id="range"></span></div>
       <div class="wd"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
       <div class="grid" id="grid"></div>
       <div class="legend">
@@ -399,7 +399,6 @@ function save(){
 function iso(d){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
-function md(s){ const d=parseISO(s); return (d.getMonth()+1)+'/'+d.getDate(); }
 function parseISO(s){ const p=s.split('-').map(Number); return new Date(p[0],p[1]-1,p[2]); }
 function addDays(s,n){ const d=parseISO(s); d.setDate(d.getDate()+n); return iso(d); }
 /** 午前4時区切りを反映した「今日」 */
@@ -601,30 +600,32 @@ function renderGrid(){
   const t = today(), grid = $('grid');
   const consumed = new Set(state.shieldsConsumed);
 
-  // 今週の土曜日を末尾にした 5週 × 7日
+  // 今日が属する月のカレンダー。月めくりはしない
   const td = parseISO(t);
-  const end = addDays(t, 6 - td.getDay());
-  const start = addDays(end, -34);
-  $('range').textContent = md(start) + ' – ' + md(end);
+  const y = td.getFullYear(), m = td.getMonth();
+  const firstDow = new Date(y, m, 1).getDay();
+  const days = new Date(y, m+1, 0).getDate();
+  $('grid-title').textContent = (m+1) + '月';
+  $('range').textContent = y + '年';
 
   grid.innerHTML = '';
-  for(let i=0;i<35;i++){
-    const d = addDays(start,i);
-    const day = parseISO(d).getDate();
+  const pad = n => { for(let i=0;i<n;i++){ const c=document.createElement('div'); c.className='cell pad'; grid.appendChild(c); } };
+
+  pad(firstDow); // 1日を曜日の列に合わせる
+  for(let day=1; day<=days; day++){
+    const d = iso(new Date(y, m, day));
     const cell = document.createElement('div');
     let cls = 'cell';
     if(d > t) cls += ' future';
     else if(isDone(d)) cls += ' done';
     else if(consumed.has(d)) cls += ' shield';
     if(d === t) cls += ' today';
-    if(day === 1) cls += ' first';
     cell.className = cls;
-    // 月初のマスだけ「9/1」と表示し、月の変わり目が分かるようにする
-    if(day === 1){ cell.innerHTML = '<span class="mon"></span>'; cell.firstChild.textContent = md(d); }
-    else cell.textContent = day;
+    cell.textContent = day;
     cell.onclick = ()=> openSheet(d);
     grid.appendChild(cell);
   }
+  pad((7 - (firstDow + days) % 7) % 7); // 最終週を7マスで揃える
 }
 
 function renderSettings(){

@@ -182,7 +182,7 @@ console.log('\n― データ保存 ―');
 console.log('\n― 描画 ―');
 {
   const a = boot(base({ logs: daysBack('2026-08-21', 10) }), '2026-08-21');
-  ok('カレンダーが35マス', a.w.document.querySelectorAll('.cell').length === 35, String(a.w.document.querySelectorAll('.cell').length));
+  ok('カレンダーは今月の日数分のマス（8月=31）', a.w.document.querySelectorAll('.cell:not(.pad)').length === 31, String(a.w.document.querySelectorAll('.cell:not(.pad)').length));
   ok('達成マスが10個', a.w.document.querySelectorAll('.cell.done').length === 10, String(a.w.document.querySelectorAll('.cell.done').length));
   ok('未来のマスが操作不能', a.w.document.querySelectorAll('.cell.future').length > 0);
   ok('タスク行が描画される', a.w.document.querySelectorAll('.task').length === 1);
@@ -192,17 +192,28 @@ console.log('\n― 描画 ―');
 console.log('\n― カレンダーの月表示 ―');
 {
   const a = boot(base({}), '2026-08-21');
-  ok('期間ラベルが表示される', /^\d+\/\d+ – \d+\/\d+$/.test(a.text('range')), a.text('range'));
-  const first = [...a.w.document.querySelectorAll('.cell.first')];
-  ok('月初のマスに first が付く', first.length >= 1, String(first.length));
-  ok('月初のマスは「8/1」形式で表示される', first.every(c => /^\d+\/1$/.test(c.textContent)), first.map(c => c.textContent).join(','));
-  const normal = [...a.w.document.querySelectorAll('.cell:not(.first)')];
-  ok('それ以外のマスは日付のみ', normal.every(c => /^\d+$/.test(c.textContent)));
+  ok('見出しに今月が出る', a.text('grid-title') === '8月', a.text('grid-title'));
+  ok('見出しの右に年が出る', a.text('range') === '2026年', a.text('range'));
+  const cells = [...a.w.document.querySelectorAll('.cell')];
+  const days = cells.filter(c => !c.classList.contains('pad'));
+  ok('1日から月末までが並ぶ', days.map(c => c.textContent).join(',') === [...Array(31)].map((_, i) => i + 1).join(','), days.map(c => c.textContent).join(','));
+  ok('マスは日付のみ', days.every(c => /^\d+$/.test(c.textContent)));
+  // 2026-08-01 は土曜なので、前に6つの空マスが入る
+  const lead = cells.findIndex(c => !c.classList.contains('pad'));
+  ok('1日が曜日の列に揃う（土曜=6マス空ける）', lead === 6, String(lead));
+  ok('グリッドは7の倍数で埋まる', cells.length % 7 === 0, String(cells.length));
+  ok('空マスは操作できない', cells.filter(c => c.classList.contains('pad')).every(c => !c.onclick));
 }
 {
-  // 月をまたがない5週間でも期間ラベルは出る
+  // 月末に近い日でも表示は同じ1か月分（月めくりはしない）
   const a = boot(base({}), '2026-08-28');
-  ok('月をまたがなくても期間ラベルは出る', a.text('range').includes('–'), a.text('range'));
+  ok('月末が近くても今月のまま', a.text('grid-title') === '8月' && a.w.document.querySelectorAll('.cell:not(.pad)').length === 31, a.text('grid-title'));
+}
+{
+  // 月初でも過去日は表示せず、その月だけを出す
+  const a = boot(base({}), '2026-09-01');
+  ok('月初は9月の30マス', a.text('grid-title') === '9月' && a.w.document.querySelectorAll('.cell:not(.pad)').length === 30, a.text('grid-title'));
+  ok('今日以外はすべて未来', a.w.document.querySelectorAll('.cell.future').length === 29, String(a.w.document.querySelectorAll('.cell.future').length));
 }
 
 console.log('\n― テーマ ―');

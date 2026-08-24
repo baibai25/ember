@@ -181,7 +181,8 @@ h2{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.2em;margin:
 .cell.shield{background:transparent;box-shadow:inset 0 0 0 1.5px var(--gold);color:var(--gold)}
 .cell.future{opacity:.3;pointer-events:none}
 .cell.today{outline:1px solid var(--text);outline-offset:2px}
-.cell.pad{background:transparent;box-shadow:none;pointer-events:none}
+.cell.out{opacity:.45}
+.cell.out.future{opacity:.15}
 .legend{display:flex;gap:16px;justify-content:center;margin-top:18px;font-size:9.5px;letter-spacing:.08em;color:var(--muted)}
 .legend i{width:9px;height:9px;border-radius:2px;display:inline-block;vertical-align:0;margin-right:6px}
 
@@ -624,29 +625,30 @@ function renderGrid(){
   const y = p[0], m = p[1] - 1;
   const firstDow = new Date(y, m, 1).getDay(); // 0=日曜。カレンダーは日曜始まり
   const days = new Date(y, m+1, 0).getDate();
+  const total = Math.ceil((firstDow + days) / 7) * 7; // 週単位に切り上げる
+
   $('grid-title').textContent = (m+1) + '月';
   $('range').textContent = y + '年';
   $('grid-prev').disabled = gridMonth <= min;
   $('grid-next').disabled = gridMonth >= cur;
 
   grid.innerHTML = '';
-  const pad = n => { for(let i=0;i<n;i++){ const c=document.createElement('div'); c.className='cell pad'; grid.appendChild(c); } };
-
-  pad(firstDow); // 1日を曜日の列に合わせる
-  for(let day=1; day<=days; day++){
-    const d = iso(new Date(y, m, day));
+  for(let i=0;i<total;i++){
+    // 1日を曜日の列に合わせ、はみ出した分は前後の月の日付を薄く出す
+    const date = new Date(y, m, i - firstDow + 1);
+    const d = iso(date);
     const cell = document.createElement('div');
     let cls = 'cell';
+    if(date.getMonth() !== m) cls += ' out';
     if(d > t) cls += ' future';
     else if(isDone(d)) cls += ' done';
     else if(consumed.has(d)) cls += ' shield';
     if(d === t) cls += ' today';
     cell.className = cls;
-    cell.textContent = day;
+    cell.textContent = date.getDate();
     cell.onclick = ()=> openSheet(d);
     grid.appendChild(cell);
   }
-  pad((7 - (firstDow + days) % 7) % 7); // 最終週を7マスで揃える
 }
 
 function renderSettings(){

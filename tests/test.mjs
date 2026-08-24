@@ -182,7 +182,7 @@ console.log('\n― データ保存 ―');
 console.log('\n― 描画 ―');
 {
   const a = boot(base({ logs: daysBack('2026-08-21', 10) }), '2026-08-21');
-  ok('カレンダーは今月の日数分のマス（8月=31）', a.w.document.querySelectorAll('.cell:not(.pad)').length === 31, String(a.w.document.querySelectorAll('.cell:not(.pad)').length));
+  ok('カレンダーは今月の日数分のマス（8月=31）', a.w.document.querySelectorAll('.cell:not(.out)').length === 31, String(a.w.document.querySelectorAll('.cell:not(.out)').length));
   ok('達成マスが10個', a.w.document.querySelectorAll('.cell.done').length === 10, String(a.w.document.querySelectorAll('.cell.done').length));
   ok('未来のマスが操作不能', a.w.document.querySelectorAll('.cell.future').length > 0);
   ok('タスク行が描画される', a.w.document.querySelectorAll('.task').length === 1);
@@ -195,25 +195,27 @@ console.log('\n― カレンダーの月表示 ―');
   ok('見出しに今月が出る', a.text('grid-title') === '8月', a.text('grid-title'));
   ok('見出しの右に年が出る', a.text('range') === '2026年', a.text('range'));
   const cells = [...a.w.document.querySelectorAll('.cell')];
-  const days = cells.filter(c => !c.classList.contains('pad'));
+  const days = cells.filter(c => !c.classList.contains('out'));
   ok('1日から月末までが並ぶ', days.map(c => c.textContent).join(',') === [...Array(31)].map((_, i) => i + 1).join(','), days.map(c => c.textContent).join(','));
-  ok('マスは日付のみ', days.every(c => /^\d+$/.test(c.textContent)));
-  // 2026-08-01 は土曜なので、前に6つの空マスが入る
-  const lead = cells.findIndex(c => !c.classList.contains('pad'));
-  ok('1日が曜日の列に揃う（土曜=6マス空ける）', lead === 6, String(lead));
+  ok('マスは日付のみ', cells.every(c => /^\d+$/.test(c.textContent)));
+  // 2026-08-01 は土曜なので、前に7月の26〜31日が並ぶ
+  const lead = cells.findIndex(c => !c.classList.contains('out'));
+  ok('1日が曜日の列に揃う（土曜=6マス手前から）', lead === 6, String(lead));
+  ok('前の月のマスに日付が出る', cells.slice(0, 6).map(c => c.textContent).join(',') === '26,27,28,29,30,31', cells.slice(0, 6).map(c => c.textContent).join(','));
+  ok('後ろは翌月のマスで埋まる', cells.slice(37).map(c => c.textContent).join(',') === '1,2,3,4,5', cells.slice(37).map(c => c.textContent).join(','));
   ok('グリッドは7の倍数で埋まる', cells.length % 7 === 0, String(cells.length));
-  ok('空マスは操作できない', cells.filter(c => c.classList.contains('pad')).every(c => !c.onclick));
 }
 {
   // 月末に近い日でも表示は同じ1か月分（月めくりはしない）
   const a = boot(base({}), '2026-08-28');
-  ok('月末が近くても今月のまま', a.text('grid-title') === '8月' && a.w.document.querySelectorAll('.cell:not(.pad)').length === 31, a.text('grid-title'));
+  ok('月末が近くても今月のまま', a.text('grid-title') === '8月' && a.w.document.querySelectorAll('.cell:not(.out)').length === 31, a.text('grid-title'));
 }
 {
   // 月初でも過去日は表示せず、その月だけを出す
   const a = boot(base({}), '2026-09-01');
-  ok('月初は9月の30マス', a.text('grid-title') === '9月' && a.w.document.querySelectorAll('.cell:not(.pad)').length === 30, a.text('grid-title'));
-  ok('今日以外はすべて未来', a.w.document.querySelectorAll('.cell.future').length === 29, String(a.w.document.querySelectorAll('.cell.future').length));
+  ok('月初は9月の30マス', a.text('grid-title') === '9月' && a.w.document.querySelectorAll('.cell:not(.out)').length === 30, a.text('grid-title'));
+  ok('今日以外はすべて未来', a.w.document.querySelectorAll('.cell:not(.out).future').length === 29, String(a.w.document.querySelectorAll('.cell:not(.out).future').length));
+  ok('前の月にはみ出した8月末は未来にしない', [...a.w.document.querySelectorAll('.cell.out')].slice(0, 2).every(c => !c.classList.contains('future')));
 }
 
 console.log('\n― 月めくり ―');
@@ -232,10 +234,11 @@ console.log('\n― 月めくり ―');
   ok('記録がある前月へは戻れる', !prev.disabled);
   prev.click();
   ok('前の月へめくれる', a.text('grid-title') === '7月' && a.text('range') === '2026年', a.text('grid-title'));
-  ok('7月は31マス', a.w.document.querySelectorAll('.cell:not(.pad)').length === 31, String(a.w.document.querySelectorAll('.cell:not(.pad)').length));
-  // 2026-07-01 は水曜なので、前に3つの空マスが入る
+  ok('7月は31マス', a.w.document.querySelectorAll('.cell:not(.out)').length === 31, String(a.w.document.querySelectorAll('.cell:not(.out)').length));
+  // 2026-07-01 は水曜なので、前に6月の28〜30日が並ぶ
   const cells = [...a.w.document.querySelectorAll('.cell')];
-  ok('めくった先でも1日が曜日の列に揃う', cells.findIndex(c => !c.classList.contains('pad')) === 3, String(cells.findIndex(c => !c.classList.contains('pad'))));
+  ok('めくった先でも1日が曜日の列に揃う', cells.findIndex(c => !c.classList.contains('out')) === 3, String(cells.findIndex(c => !c.classList.contains('out'))));
+  ok('めくった先も前の月のマスが出る', cells.slice(0, 3).map(c => c.textContent).join(',') === '28,29,30', cells.slice(0, 3).map(c => c.textContent).join(','));
   ok('過去の月では今日のマスが出ない', a.w.document.querySelectorAll('.cell.today').length === 0);
   ok('7月の達成が3マス', a.w.document.querySelectorAll('.cell.done').length === 3, String(a.w.document.querySelectorAll('.cell.done').length));
   ok('記録より前の月へは戻れない', a.w.document.getElementById('grid-prev').disabled);
@@ -252,12 +255,26 @@ console.log('\n― 月めくり ―');
   // めくった先の過去日も編集できる
   const a = boot(base({ logs: daysBack('2026-07-05', 3) }), '2026-08-21');
   a.w.document.getElementById('grid-prev').click();
-  const cell = [...a.w.document.querySelectorAll('.cell:not(.pad)')].find(c => c.textContent === '10');
+  const cell = [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => c.textContent === '10');
   cell.click();
   ok('めくった先の日付でシートが開く', a.text('sheet-date') === '7月10日（金）', a.text('sheet-date'));
   a.w.document.querySelector('#sheet-body .toggle').click();
   ok('めくった先の日を記録できる', !!a.state().logs['2026-07-10'], JSON.stringify(a.state().logs));
   ok('記録しても表示中の月は動かない', a.text('grid-title') === '7月', a.text('grid-title'));
+}
+
+console.log('\n― 前後の月のマス ―');
+{
+  const a = boot(base({ logs: daysBack('2026-07-31', 4) }), '2026-08-21');
+  const out = [...a.w.document.querySelectorAll('.cell.out')];
+  ok('前の月の達成もそのまま出る', out.filter(c => c.classList.contains('done')).length === 4, String(out.filter(c => c.classList.contains('done')).length));
+  ok('翌月のマスは未来として扱う', out.filter(c => c.textContent === '1')[0].classList.contains('future'));
+  // 7月31日のマス（8月のカレンダーの先頭行）を押して取り消す
+  out.find(c => c.textContent === '31').click();
+  ok('前の月のマスからシートを開ける', a.text('sheet-date') === '7月31日（金）', a.text('sheet-date'));
+  a.w.document.querySelector('#sheet-body .toggle').click();
+  ok('前の月のマスから記録を取り消せる', !a.state().logs['2026-07-31'], JSON.stringify(a.state().logs));
+  ok('表示中の月は8月のまま', a.text('grid-title') === '8月', a.text('grid-title'));
 }
 
 console.log('\n― テーマ ―');

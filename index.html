@@ -169,15 +169,34 @@ h2{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.2em;margin:
 .gridnav{display:flex;align-items:center;gap:8px}
 .navbtn{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;width:26px;height:26px;padding:0;font-size:13px;line-height:1;flex:none;cursor:pointer}
 .navbtn:disabled{opacity:.25;cursor:default}
-.wd{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
+.wd{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:10px} /* 1週目のバッジがはみ出す分の余白 */
 .wd span{text-align:center;font-size:8.5px;letter-spacing:.1em;color:var(--muted)}
 .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
 .cell{
   aspect-ratio:1;border-radius:var(--cell-radius);background:var(--surface2);
   position:relative;cursor:pointer;display:grid;place-items:center;
   font-size:9px;color:var(--muted);transition:background .4s;
+  container-type:inline-size; /* バッジをセル幅に追従させる */
 }
-.cell.done{background:var(--ember);color:var(--on-ember);font-weight:700;box-shadow:var(--cell-glow)}
+.cell.done{background:var(--ember);color:var(--on-ember);font-weight:700;box-shadow:var(--cell-glow);z-index:1}
+
+/* 消化数バッジ。iOS のアプリバッジと同じく角からはみ出す。
+   はみ出し量は gap(6px) 未満に収めてあるので隣のセルとは重ならない */
+.cell .count{
+  position:absolute;top:-4px;right:-4px;
+  min-width:15px;height:15px;padding:0 3px;border-radius:999px;
+  background:var(--ember);color:var(--on-ember);
+  box-shadow:0 0 0 2px var(--bg); /* 台紙の色で縁を抜き、ember のセルの上でも輪郭を出す */
+  font-size:9px;line-height:15px;font-weight:700;
+  font-variant-numeric:tabular-nums;text-align:center;
+}
+@supports (width:1cqw){
+  .cell .count{
+    top:-9cqw;right:-9cqw;
+    min-width:32cqw;height:32cqw;line-height:32cqw;font-size:19cqw;padding:0 6cqw;
+    box-shadow:0 0 0 4cqw var(--bg);
+  }
+}
 .cell.shield{background:transparent;box-shadow:inset 0 0 0 1.5px var(--gold);color:var(--gold)}
 .cell.future{opacity:.3;pointer-events:none}
 .cell.today{outline:1px solid var(--text);outline-offset:2px}
@@ -414,7 +433,9 @@ function today(){
 }
 
 /* ============ 導出値（保存しない） ============ */
-function isDone(date){ const l = state.logs[date]; return !!(l && l.length); }
+/** その日に消化したタスク数 */
+function doneCount(date){ const l = state.logs[date]; return l ? l.length : 0; }
+function isDone(date){ return doneCount(date) > 0; }
 function points(){ return Object.keys(state.logs).filter(isDone).length; }
 function shieldsGenerated(){ return Math.floor(points()/PT_PER_SHIELD); }
 function shieldsAvailable(){ return shieldsGenerated() - state.shieldsConsumed.length; }
@@ -646,6 +667,17 @@ function renderGrid(){
     if(d === t) cls += ' today';
     cell.className = cls;
     cell.textContent = date.getDate();
+
+    // 消化数バッジ。未達日と未来日には出さない
+    const n = d <= t ? doneCount(d) : 0;
+    if(n){
+      const badge = document.createElement('span');
+      badge.className = 'count';
+      badge.textContent = n;
+      cell.appendChild(badge);
+      cell.title = (date.getMonth()+1) + '月' + date.getDate() + '日 ' + n + '件';
+    }
+
     cell.onclick = ()=> openSheet(d);
     grid.appendChild(cell);
   }

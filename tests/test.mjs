@@ -277,10 +277,11 @@ console.log('\n― 消化数バッジ ―');
       { id: 't2', name: '読書', order: 1, archived: false },
       { id: 't3', name: '日記', order: 2, archived: false }
     ],
-    logs: { '2026-08-20': ['t1'], '2026-08-21': ['t1', 't2', 't3'] }
+    // 8/22 は未来。復元データ由来の未来日ログでもバッジを出さないことを確かめる
+    logs: { '2026-08-20': ['t1'], '2026-08-21': ['t1', 't2', 't3'], '2026-08-22': ['t1'] }
   }), '2026-08-21');
-  const cells = [...a.w.document.querySelectorAll('.cell:not(.out)')];
-  const at = n => cells.find(c => day(c) === String(n));
+  // 再描画のたびにマスは作り直されるので、毎回引き直す
+  const at = n => [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === String(n));
 
   ok('複数消化した日にその個数が出る', badge(at(21)) === '3', String(badge(at(21))));
   ok('1個の日にも数が出る', badge(at(20)) === '1', String(badge(at(20))));
@@ -293,8 +294,7 @@ console.log('\n― 消化数バッジ ―');
   // 記録すると即座に増える
   at(21).click();
   a.w.document.querySelectorAll('#sheet-body .toggle')[0].click();  // t1 を取り消す
-  const after = [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '21');
-  ok('記録を取り消すとバッジも減る', badge(after) === '2', String(badge(after)));
+  ok('記録を取り消すとバッジも減る', badge(at(21)) === '2', String(badge(at(21))));
 }
 {
   // シールドで埋めた日は消化していないのでバッジを出さない

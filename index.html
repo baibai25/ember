@@ -178,24 +178,23 @@ h2{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.2em;margin:
   font-size:9px;color:var(--muted);transition:background .4s;
   container-type:inline-size; /* バッジをセル幅に追従させる */
 }
-.cell.done{background:var(--ember);color:var(--on-ember);font-weight:700;box-shadow:var(--cell-glow);z-index:1}
+.cell.done{background:var(--ember);color:var(--on-ember);font-weight:700;box-shadow:var(--cell-glow)}
 
 /* 消化数バッジ。iOS のアプリバッジと同じく角からはみ出す。
-   はみ出し量は gap(6px) 未満に収めてあるので隣のセルとは重ならない */
+   全寸法は --u の倍数で指定し、対応環境では @supports がセル幅基準（cqw）に切り替える。
+   はみ出し量はオフセット3u+縁1.5u=4.5u。u=2cqw でもセル幅の9%（最大セル63pxで約5.7px）なので、
+   gap(6px) を越えず隣のセルとは重ならない */
 .cell .count{
-  position:absolute;top:-4px;right:-4px;
-  min-width:15px;height:15px;padding:0 3px;border-radius:999px;
-  background:var(--ember);color:var(--on-ember);
-  box-shadow:0 0 0 2px var(--bg); /* 台紙の色で縁を抜き、ember のセルの上でも輪郭を出す */
-  font-size:9px;line-height:15px;font-weight:700;
+  --u:1px;
+  position:absolute;top:calc(-3*var(--u));right:calc(-3*var(--u));
+  min-width:calc(15*var(--u));height:calc(15*var(--u));padding:0 calc(3*var(--u));
+  border-radius:999px;background:var(--ember);color:var(--on-ember);
+  box-shadow:0 0 0 calc(1.5*var(--u)) var(--bg); /* 台紙の色で縁を抜き、ember のセルの上でも輪郭を出す */
+  font-size:calc(9*var(--u));line-height:calc(15*var(--u));font-weight:700;
   font-variant-numeric:tabular-nums;text-align:center;
 }
 @supports (width:1cqw){
-  .cell .count{
-    top:-9cqw;right:-9cqw;
-    min-width:32cqw;height:32cqw;line-height:32cqw;font-size:19cqw;padding:0 6cqw;
-    box-shadow:0 0 0 4cqw var(--bg);
-  }
+  .cell .count{ --u:2cqw }
 }
 .cell.shield{background:transparent;box-shadow:inset 0 0 0 1.5px var(--gold);color:var(--gold)}
 .cell.future{opacity:.3;pointer-events:none}
@@ -659,23 +658,23 @@ function renderGrid(){
     const date = new Date(y, m, i - firstDow + 1);
     const d = iso(date);
     const cell = document.createElement('div');
+    const n = doneCount(d);
+    const future = d > t;
     let cls = 'cell';
     if(date.getMonth() !== m) cls += ' out';
-    if(d > t) cls += ' future';
-    else if(isDone(d)) cls += ' done';
+    if(future) cls += ' future';
+    else if(n) cls += ' done';
     else if(consumed.has(d)) cls += ' shield';
     if(d === t) cls += ' today';
     cell.className = cls;
     cell.textContent = date.getDate();
 
-    // 消化数バッジ。未達日と未来日には出さない
-    const n = d <= t ? doneCount(d) : 0;
-    if(n){
+    // 消化数バッジ。達成日（= done のマス）にだけ出す
+    if(n && !future){
       const badge = document.createElement('span');
       badge.className = 'count';
       badge.textContent = n;
       cell.appendChild(badge);
-      cell.title = (date.getMonth()+1) + '月' + date.getDate() + '日 ' + n + '件';
     }
 
     cell.onclick = ()=> openSheet(d);

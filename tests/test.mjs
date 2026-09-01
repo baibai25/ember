@@ -194,6 +194,141 @@ console.log('\n― 描画 ―');
   ok('達成済みのタスクに done が付く', a.w.document.querySelector('.task').classList.contains('done'));
 }
 
+console.log('\n― タスクの通算回数 ―');
+{
+  const a = boot(base({
+    tasks: [
+      { id: 't1', name: 'スクワット', order: 0, archived: false },
+      { id: 't2', name: '読書', order: 1, archived: false },
+      { id: 't3', name: '日記', order: 2, archived: false }
+    ],
+    logs: { '2026-08-19': ['t1'], '2026-08-20': ['t1', 't2'], '2026-08-21': ['t1'] }
+  }), '2026-08-21');
+  // 再描画のたびに行は作り直されるので、毎回引き直す
+  const tally = n => a.w.document.querySelectorAll('.task .tally')[n].textContent;
+
+  ok('通算回数がタスクの行に出る', tally(0) === '3 回', tally(0));
+  ok('タスクごとに独立して数える', tally(1) === '1 回', tally(1));
+  ok('1度もやっていないタスクにも 0 を出す', tally(2) === '0 回', tally(2));
+
+  // 過去日を編集すれば通算も追随する（連続日数と同じく毎回数え直しているため）
+  const at = n => [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === String(n));
+  at(19).click();
+  a.w.document.querySelectorAll('#sheet-body .toggle')[0].click();  // 8/19 の t1 を取り消す
+  ok('過去日を取り消すと通算が減る', tally(0) === '2 回', tally(0));
+  a.w.document.querySelectorAll('#sheet-body .toggle')[1].click();  // 8/19 に t2 を足す
+  ok('過去日を足すと通算が増える', tally(1) === '2 回', tally(1));
+}
+{
+  const a = boot(base({ logs: {} }), '2026-08-21');
+  ok('記録が1件もなくても 0 回として出る', a.w.document.querySelector('.task .tally').textContent === '0 回',
+     a.w.document.querySelector('.task .tally').textContent);
+}
+{
+  // アーカイブされたタスクの記録は残るが、行そのものが出ない
+  const a = boot(base({
+    tasks: [{ id: 't1', name: 'スクワット', order: 0, archived: true }],
+    logs: { '2026-08-21': ['t1'] }
+  }), '2026-08-21');
+  ok('アーカイブ済みのタスクは行ごと出ない', a.w.document.querySelectorAll('.task .tally').length === 0);
+}
+
+console.log('\n― 行の長押し ―');
+// jsdom に PointerEvent はないので MouseEvent で代用する（ハンドラが見るのは座標とボタンだけ）
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function pointer(el, type, x = 0, y = 0) {
+  const w = el.ownerDocument.defaultView;
+  el.dispatchEvent(new w.MouseEvent(type, { bubbles: true, clientX: x, clientY: y }));
+}
+// 実時間で requestAnimationFrame を回す必要があるので、PRESS_MS(500ms) より少し長く待つ
+const HOLD = 650;
+function row(a) { return a.w.document.querySelector('.task'); }
+function logged(a, date = '2026-08-21') { return (a.state().logs[date] || []).includes('t1'); }
+
+{
+  const a = boot(base({}), '2026-08-21');
+  ok('行が押下対象になっている', row(a).getAttribute('role') === 'button');
+  ok('行に入れ子のボタンを持たない', row(a).querySelector('button') === null);
+  ok('未達の行は aria-pressed が false', row(a).getAttribute('aria-pressed') === 'false');
+  ok('丸はスクリーンリーダーから隠す', row(a).querySelector('.btn').getAttribute('aria-hidden') === 'true');
+
+  // 名前の上（丸ではない場所）から押し始める
+  pointer(row(a), 'pointerdown', 20, 20);
+  await sleep(HOLD);
+  pointer(row(a), 'pointerup', 20, 20);
+  ok('行のどこを長押ししても記録される', logged(a), JSON.stringify(a.state().logs));
+  ok('記録した行は aria-pressed が true', row(a).getAttribute('aria-pressed') === 'true');
+  ok('記録すると通算回数がその場で増える', row(a).querySelector('.tally').textContent === '1 回',
+     row(a).querySelector('.tally').textContent);
+}
+{
+  // 丸から押し始めても、行のハンドラまで伝播して同じように記録される
+  const a = boot(base({}), '2026-08-21');
+  pointer(row(a).querySelector('.btn'), 'pointerdown', 20, 20);
+  await sleep(HOLD);
+  pointer(row(a), 'pointerup', 20, 20);
+  ok('丸の上から押し始めても記録される', logged(a), JSON.stringify(a.state().logs));
+}
+{
+  const a = boot(base({ logs: { '2026-08-21': ['t1'] } }), '2026-08-21');
+  pointer(row(a), 'pointerdown', 20, 20);
+  await sleep(HOLD);
+  pointer(row(a), 'pointerup', 20, 20);
+  ok('もう一度長押しすると取り消せる', !logged(a), JSON.stringify(a.state().logs));
+  ok('取り消すと通算回数も戻る', row(a).querySelector('.tally').textContent === '0 回',
+     row(a).querySelector('.tally').textContent);
+}
+{
+  const a = boot(base({}), '2026-08-21');
+  pointer(row(a), 'pointerdown', 20, 20);
+  await sleep(200);
+  pointer(row(a), 'pointerup', 20, 20);
+  await sleep(450);
+  ok('途中で離せば記録されない', !logged(a), JSON.stringify(a.state().logs));
+}
+{
+  // 指が動いたらスクロールの意図とみなす（タスク欄からページを送れなくならないように）
+  const a = boot(base({}), '2026-08-21');
+  pointer(row(a), 'pointerdown', 20, 20);
+  pointer(row(a), 'pointermove', 22, 60);
+  await sleep(HOLD);
+  pointer(row(a), 'pointerup', 22, 60);
+  ok('指を動かしたら記録しない', !logged(a), JSON.stringify(a.state().logs));
+}
+{
+  const a = boot(base({}), '2026-08-21');
+  pointer(row(a), 'pointerdown', 20, 20);
+  pointer(row(a), 'pointermove', 24, 26);   // 10px 以内の揺れは押し続けているとみなす
+  await sleep(HOLD);
+  pointer(row(a), 'pointerup', 24, 26);
+  ok('わずかな指の揺れでは中断しない', logged(a), JSON.stringify(a.state().logs));
+}
+{
+  const a = boot(base({}), '2026-08-21');
+  pointer(row(a), 'pointercancel', 20, 20);  // 押していないところに来ても壊れない
+  pointer(row(a), 'pointerdown', 20, 20);
+  pointer(row(a), 'pointercancel', 20, 20);  // ブラウザがスクロールを引き取った
+  await sleep(HOLD);
+  ok('pointercancel で中断する', !logged(a), JSON.stringify(a.state().logs));
+}
+{
+  // キーボードも押しっぱなしで記録する（操作を1つに揃える）
+  const a = boot(base({}), '2026-08-21');
+  const key = (el, type) => el.dispatchEvent(new a.w.KeyboardEvent(type, { key: 'Enter', bubbles: true }));
+  key(row(a), 'keydown');
+  await sleep(HOLD);
+  ok('キーボードの押しっぱなしでも記録される', logged(a), JSON.stringify(a.state().logs));
+}
+{
+  const a = boot(base({}), '2026-08-21');
+  const el = row(a);
+  el.dispatchEvent(new a.w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  await sleep(200);
+  el.dispatchEvent(new a.w.KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+  await sleep(450);
+  ok('途中でキーを離せば記録されない', !logged(a), JSON.stringify(a.state().logs));
+}
+
 console.log('\n― カレンダーの月表示 ―');
 {
   const a = boot(base({}), '2026-08-21');

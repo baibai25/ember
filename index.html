@@ -137,13 +137,27 @@ h2{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.2em;margin:
 .task{
   display:flex;align-items:center;gap:14px;
   padding:15px 2px;border-bottom:1px solid var(--rule);
-  background:transparent;border-radius:0;transition:background .3s;
+  border-radius:0;
+  /* 行のどこでも長押しできる。縦スクロールは残し（pan-y）、スクロールが
+     始まればブラウザが pointercancel を投げるので長押しは自然に中断される */
+  touch-action:pan-y;cursor:pointer;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+  /* 長押しの進捗を行の左から塗る。--p は attachPress が毎フレーム書く。
+     達成の色は background-color、進捗は background-image と役割を分けて食い合わせない。
+     transition も background-color に限定する（background だと進捗が .3s 遅れる） */
+  background-color:transparent;transition:background-color .3s;
+  background-image:linear-gradient(var(--ember-press),var(--ember-press));
+  background-repeat:no-repeat;
+  background-size:calc(var(--p,0) * 100%) 100%;
 }
-.task.done{background:var(--ember-soft)}
+.task.done{background-color:var(--ember-soft)}
 .task .name{flex:1;font-size:16px;font-weight:500;line-height:1.35;word-break:break-word}
 .task.done .name{color:var(--muted)}
+/* 通算実行回数。桁が変わっても丸の位置が動かないよう tabular-nums で揃える */
+.tally{flex:none;font-size:11px;color:var(--muted);letter-spacing:.06em;font-variant-numeric:tabular-nums}
 
-.btn{position:relative;width:44px;height:44px;flex:none;padding:0;border:0;background:transparent;touch-action:none;cursor:pointer}
+/* 丸は状態と進捗を出すだけの表示。押下対象は行そのもの */
+.btn{position:relative;width:44px;height:44px;flex:none;padding:0;border:0;background:transparent}
 .btn svg{position:absolute;inset:0;width:44px;height:44px;transform:rotate(-90deg)}
 .btn circle{fill:none;stroke-width:2.5;stroke-linecap:round}
 .btn .track{stroke:var(--border)}
@@ -436,6 +450,15 @@ function today(){
 /* ============ 導出値（保存しない） ============ */
 /** その日に消化したタスク数 */
 function doneCount(date){ const l = state.logs[date]; return l ? l.length : 0; }
+/** タスクごとの通算実行回数。連続日数と同じく保存せず、記録から毎回数え直す */
+function taskCounts(){
+  const c = Object.create(null);
+  for(const ids of Object.values(state.logs)){
+    if(!Array.isArray(ids)) continue;
+    for(const id of ids) c[id] = (c[id] || 0) + 1;
+  }
+  return c;
+}
 function isDone(date){ return doneCount(date) > 0; }
 function points(){ return Object.keys(state.logs).filter(isDone).length; }
 function shieldsGenerated(){ return Math.floor(points()/PT_PER_SHIELD); }
@@ -526,6 +549,7 @@ function applyHeat(){
   const root = document.documentElement.style;
   root.setProperty('--ember', `rgb(${r},${g},${b})`);
   root.setProperty('--ember-soft', `rgba(${r},${g},${b},.07)`);
+  root.setProperty('--ember-press', `rgba(${r},${g},${b},.13)`);   // 達成済みの行の上でも見えるよう濃いめ
   root.setProperty('--ember-glow', `rgba(${r},${g},${b},.42)`);
   root.setProperty('--heat', String(Math.min(1, s/30)));
 }
@@ -591,6 +615,7 @@ function renderHero(){
 function renderTasks(){
   const t = today(), ul = $('tasks');
   const list = state.tasks.filter(x=>!x.archived).sort((a,b)=>a.order-b.order);
+  const counts = taskCounts();
   ul.innerHTML = '';
 
   if(!list.length){
@@ -602,15 +627,21 @@ function renderTasks(){
     const li = document.createElement('li');
     li.className = 'task' + (done ? ' done' : '');
     li.dataset.id = task.id;
+    // 行そのものが押下対象。丸を入れ子のボタンにはしない（状態は aria-pressed で伝える）
+    li.setAttribute('role','button');
+    li.setAttribute('tabindex','0');
+    li.setAttribute('aria-pressed', done ? 'true' : 'false');
     li.innerHTML =
       '<span class="name"></span>'+
-      '<button class="btn" aria-label="記録">'+
+      '<span class="tally"></span>'+
+      '<span class="btn" aria-hidden="true">'+
         '<svg viewBox="0 0 44 44"><circle class="track" cx="22" cy="22" r="18"></circle>'+
         '<circle class="prog" cx="22" cy="22" r="18"></circle></svg>'+
         '<span class="core">✓</span>'+
-      '</button>';
+      '</span>';
     li.querySelector('.name').textContent = task.name;
-    attachPress(li.querySelector('.btn'), ()=>{
+    li.querySelector('.tally').textContent = (counts[task.id] || 0) + ' 回';
+    attachPress(li, ()=>{
       toggleTask(t, task.id);
       const nowDone = (state.logs[t]||[]).includes(task.id);
       render();
@@ -726,12 +757,20 @@ function swap(list,i,j){ const a=list[i].order; list[i].order=list[j].order; lis
 
 /* ============ 長押し ============ */
 const CIRC = 2 * Math.PI * 18;
-function attachPress(btn, done){
-  const prog = btn.querySelector('.prog');
-  prog.style.strokeDasharray = CIRC;
-  let raf = null, active = false, t0 = 0;
+/** これ以上指が動いたらスクロールの意図とみなし、記録しない */
+const MOVE_TOL = 10;
 
-  const set = p => { prog.style.strokeDashoffset = CIRC * (1-p); };
+/** el（タスクの行）を PRESS_MS 押し続けたら done() を呼ぶ */
+function attachPress(el, done){
+  const prog = el.querySelector('.prog');
+  prog.style.strokeDasharray = CIRC;
+  let raf = null, active = false, t0 = 0, x0 = 0, y0 = 0;
+
+  // リング（丸）と行のフィルを同じ進捗で動かす
+  const set = p => {
+    prog.style.strokeDashoffset = CIRC * (1-p);
+    el.style.setProperty('--p', p);
+  };
   const step = ts => {
     if(!active) return;
     const p = Math.min(1, (ts - t0) / PRESS_MS);
@@ -739,14 +778,34 @@ function attachPress(btn, done){
     if(p >= 1){ active = false; set(0); done(); }
     else raf = requestAnimationFrame(step);
   };
-  const begin = e => { e.preventDefault(); active = true; t0 = performance.now(); raf = requestAnimationFrame(step); };
+  const begin = () => { active = true; t0 = performance.now(); raf = requestAnimationFrame(step); };
   const end   = () => { active = false; if(raf) cancelAnimationFrame(raf); set(0); };
 
-  btn.addEventListener('pointerdown', begin);
-  btn.addEventListener('pointerup', end);
-  btn.addEventListener('pointercancel', end);
-  btn.addEventListener('pointerleave', end);
-  btn.addEventListener('contextmenu', e=>e.preventDefault());
+  // pointerdown では preventDefault しない。行で止めるとスクロールに干渉するため、
+  // 文字選択と iOS のコールアウトは CSS 側（user-select / touch-callout）で抑える
+  el.addEventListener('pointerdown', e=>{
+    if(e.isPrimary === false || e.button > 0) return;
+    x0 = e.clientX; y0 = e.clientY;
+    begin();
+  });
+  // スクロールを始めた指では記録しない。pointercancel が来ない環境のための保険
+  el.addEventListener('pointermove', e=>{
+    if(!active) return;
+    if(Math.abs(e.clientX - x0) > MOVE_TOL || Math.abs(e.clientY - y0) > MOVE_TOL) end();
+  });
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+  el.addEventListener('pointerleave', end);
+  el.addEventListener('contextmenu', e=>e.preventDefault());
+
+  // キーボードも押しっぱなしで記録する（操作を1つに揃える）
+  el.addEventListener('keydown', e=>{
+    if(e.repeat || (e.key !== ' ' && e.key !== 'Enter')) return;
+    e.preventDefault();   // Space でのスクロールを止める
+    if(!active) begin();
+  });
+  el.addEventListener('keyup', end);
+  el.addEventListener('blur', end);
 }
 
 /* ============ 過去日シート ============ */

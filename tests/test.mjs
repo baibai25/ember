@@ -36,7 +36,7 @@ function boot(seed, nowISO) {
   };
 }
 
-const TASKS = [{ id: 't1', name: 'スクワット10回', order: 0, archived: false }];
+const TASKS = [{ id: 't1', name: 'スクワット10回', order: 0, archived: false, createdAt: '2026-01-01' }];
 function base(over) {
   return Object.assign({
     version: 2, settings: { dayBoundaryHour: 4 }, tasks: TASKS,
@@ -55,8 +55,8 @@ function span(from, to, ids = ['t1']) {
 }
 function without(logs, ...dates) { for (const d of dates) delete logs[d]; return logs; }
 const TWO = [
-  { id: 't1', name: 'スクワット', order: 0, archived: false },
-  { id: 't2', name: '懸垂', order: 1, archived: false }
+  { id: 't1', name: 'スクワット', order: 0, archived: false, createdAt: '2026-01-01' },
+  { id: 't2', name: '懸垂', order: 1, archived: false, createdAt: '2026-01-01' }
 ];
 // 設定画面の集計値（描画は毎回走るので、ホームにいたままでも読める）
 function stats(a) { return { days: a.text('s-days'), sh: a.text('s-sh'), best: a.text('s-best'), used: a.text('s-used') }; }
@@ -195,12 +195,6 @@ console.log('\n― 週に必須のタスク ―');
   const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-17' })];
   const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
   ok('アーカイブより前の週はそのまま必須', marks(a)[2] === 'reset', marks(a).join(','));
-}
-{
-  // 日付を持たない旧データのアーカイブは最初から外す
-  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true })];
-  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
-  ok('日付のない旧アーカイブは必須にしない', marks(a)[2] === 'earn', marks(a).join(','));
 }
 
 {
@@ -348,7 +342,7 @@ console.log('\n― タスク管理 ―');
 }
 {
   // アーカイブしても過去の記録と連続日数は残る
-  const a = boot(base({ logs: daysBack('2026-08-21', 6), tasks: [{ id: 't1', name: '懸垂', order: 0, archived: true }] }), '2026-08-21');
+  const a = boot(base({ logs: daysBack('2026-08-21', 6), tasks: [{ id: 't1', name: '懸垂', order: 0, archived: true, createdAt: '2026-01-01', archivedAt: '2026-08-21' }] }), '2026-08-21');
   ok('アーカイブ後も連続日数は保持される', a.html('hero').includes('>6<'), a.html('hero').slice(0, 80));
 }
 
@@ -356,19 +350,6 @@ console.log('\n― データ保存 ―');
 {
   const a = boot(base({ logs: daysBack('2026-08-21', 2) }), '2026-08-21');
   ok('localStorageに書き込まれている', !!a.state().logs['2026-08-21']);
-}
-{
-  // 旧ルールの保存値（シールド消費日・自己ベスト）は使わず、記録から計算し直す
-  const seed = base({ logs: daysBack('2026-08-19', 14) });
-  seed.shieldsConsumed = ['2026-08-20'];
-  seed.meta = { lastCheckedDate: '2026-08-21', bestStreak: 99, lastBackupAt: '2026-08-01' };
-  const a = boot(seed, '2026-08-21');
-  ok('保存済みの自己ベストは使わない', stats(a).best === '14 日', stats(a).best);
-  a.w.document.querySelector('.cell.today').click();
-  a.w.document.querySelector('#sheet-body .toggle').click();
-  const s = a.state();
-  ok('保存し直すと旧ルールの値は消える', !('shieldsConsumed' in s) && !('bestStreak' in s.meta) && !('lastCheckedDate' in s.meta), JSON.stringify(s.meta));
-  ok('バックアップ日時は残る', s.meta.lastBackupAt === '2026-08-01', JSON.stringify(s.meta));
 }
 {
   // 壊れたデータからの復旧
@@ -393,9 +374,9 @@ console.log('\n― タスクの今週の回数 ―');
 {
   const a = boot(base({
     tasks: [
-      { id: 't1', name: 'スクワット', order: 0, archived: false },
-      { id: 't2', name: '読書', order: 1, archived: false },
-      { id: 't3', name: '日記', order: 2, archived: false }
+      { id: 't1', name: 'スクワット', order: 0, archived: false, createdAt: '2026-01-01' },
+      { id: 't2', name: '読書', order: 1, archived: false, createdAt: '2026-01-01' },
+      { id: 't3', name: '日記', order: 2, archived: false, createdAt: '2026-01-01' }
     ],
     // 8/14 は先週なので今週の回数には入らない
     logs: { '2026-08-14': ['t1', 't2'], '2026-08-19': ['t1'], '2026-08-20': ['t1', 't2'], '2026-08-21': ['t1'] }
@@ -440,7 +421,7 @@ console.log('\n― タスクの今週の回数 ―');
 {
   // アーカイブされたタスクの記録は残るが、行そのものが出ない
   const a = boot(base({
-    tasks: [{ id: 't1', name: 'スクワット', order: 0, archived: true }],
+    tasks: [{ id: 't1', name: 'スクワット', order: 0, archived: true, createdAt: '2026-01-01', archivedAt: '2026-08-21' }],
     logs: { '2026-08-21': ['t1'] }
   }), '2026-08-21');
   ok('アーカイブ済みのタスクは行ごと出ない', a.w.document.querySelectorAll('.task .tally').length === 0);
@@ -633,9 +614,9 @@ console.log('\n― 消化数バッジ ―');
   // 8/21 は3個、8/20 は1個、8/19 は未達
   const a = boot(base({
     tasks: [
-      { id: 't1', name: 'スクワット', order: 0, archived: false },
-      { id: 't2', name: '読書', order: 1, archived: false },
-      { id: 't3', name: '日記', order: 2, archived: false }
+      { id: 't1', name: 'スクワット', order: 0, archived: false, createdAt: '2026-01-01' },
+      { id: 't2', name: '読書', order: 1, archived: false, createdAt: '2026-01-01' },
+      { id: 't3', name: '日記', order: 2, archived: false, createdAt: '2026-01-01' }
     ],
     // 8/22 は未来。復元データ由来の未来日ログでもバッジを出さないことを確かめる
     logs: { '2026-08-20': ['t1'], '2026-08-21': ['t1', 't2', 't3'], '2026-08-22': ['t1'] }
@@ -709,14 +690,6 @@ console.log('\n― テーマ ―');
   ok('再起動後もライトが維持される', a.w.document.documentElement.getAttribute('data-theme') === 'light');
   ok('設定画面にも反映されている', (a.w.document.getElementById('nav-settings').click(), a.w.document.getElementById('theme').value === 'light'));
 }
-{
-  // 旧バージョンの保存データ（themeキーなし）からの移行
-  const old = { version:1, settings:{ dayBoundaryHour:4 }, tasks:TASKS, logs:daysBack('2026-08-21',3), shieldsConsumed:[], meta:{ lastCheckedDate:null, bestStreak:0, lastBackupAt:null } };
-  const a = boot(old, '2026-08-21');
-  ok('themeキーが無い古いデータでも壊れない', a.html('hero').includes('class="bignum">3<'), a.html('hero').slice(0,60));
-  a.w.document.getElementById('nav-settings').click();
-  ok('既定値の system が補われる', a.w.document.getElementById('theme').value === 'system');
-}
 
 console.log('\n― 名称とコピー ―');
 {
@@ -736,24 +709,6 @@ console.log('\n― 名称とコピー ―');
   const empty = a.w.document.querySelector('.empty');
   ok('タスク未登録なら空状態を出す', !!empty);
   ok('空状態のコピーから説教が消えている', empty && !empty.textContent.includes('ばかばかしい'), empty && empty.textContent);
-}
-
-console.log('\n― 旧バージョンからの移行 ―');
-{
-  const seed = base({ logs: daysBack('2026-08-21', 9) });
-  const dom = new JSDOM(HTML, {
-    runScripts: 'dangerously', url: 'https://example.com/', pretendToBeVisual: true,
-    beforeParse(w) {
-      const fixed = new Date('2026-08-21T12:00:00').getTime();
-      const R = w.Date;
-      w.Date = class extends R { constructor(...a){ return a.length ? new R(...a) : new R(fixed); } static now(){ return fixed; } };
-      w.localStorage.setItem('tsuzukeru.v1', JSON.stringify(seed));   // 旧キーだけ存在する状態
-    }
-  });
-  const w = dom.window;
-  ok('旧キーのデータを引き継ぐ', w.document.getElementById('hero').innerHTML.includes('class="bignum">9<'), w.document.getElementById('hero').innerHTML.slice(0, 60));
-  ok('新キーに移し替えられている', !!w.localStorage.getItem('ember.v1'));
-  ok('旧キーは削除される', w.localStorage.getItem('tsuzukeru.v1') === null);
 }
 
 console.log('\n― 反応する色（連続日数に連動）―');

@@ -15,7 +15,7 @@
 /* 描画前にテーマを当てる（切り替え時のちらつき防止） */
 (function(){
   try{
-    var raw = localStorage.getItem('ember.v1') || localStorage.getItem('tsuzukeru.v1') || '{}';
+    var raw = localStorage.getItem('ember.v1') || '{}';
     var s = JSON.parse(raw);
     var t = (s.settings && s.settings.theme) || 'system';
     if(t !== 'system') document.documentElement.setAttribute('data-theme', t);
@@ -403,7 +403,6 @@ nav button.on svg{stroke-width:1.9}
 
 /* ============ 定数 ============ */
 const KEY = 'ember.v1';
-const LEGACY_KEYS = ['tsuzukeru.v1'];
 const PRESS_MS = 500;
 const WD = ['日','月','火','水','木','金','土'];
 
@@ -423,32 +422,18 @@ function blank(){
     meta: { lastBackupAt: null }
   };
 }
-/** 保存データを今の形に揃える。読み込みと復元の両方で通す */
+/** 欠けている設定の既定値を補う。読み込みと復元の両方で通す */
 function normalize(s){
   const b = blank();
-  const out = Object.assign(b, s, {
-    version: b.version,
+  return Object.assign(b, s, {
     settings: Object.assign(b.settings, s.settings||{}),
     meta: Object.assign(b.meta, s.meta||{})
   });
-  // 旧ルールの保存値。シールドも自己ベストも記録から導出するようになったので持たない
-  delete out.shieldsConsumed;
-  delete out.meta.lastCheckedDate;
-  delete out.meta.bestStreak;
-  return out;
 }
 function load(){
   try{
-    let raw = localStorage.getItem(KEY);
-    if(!raw){
-      // 旧名のデータがあれば引き継ぐ
-      for(const k of LEGACY_KEYS){
-        const old = localStorage.getItem(k);
-        if(old){ raw = old; localStorage.setItem(KEY, old); localStorage.removeItem(k); break; }
-      }
-    }
-    if(!raw) return blank();
-    return normalize(JSON.parse(raw));
+    const raw = localStorage.getItem(KEY);
+    return raw ? normalize(JSON.parse(raw)) : blank();
   }catch(e){ return blank(); }
 }
 function save(){
@@ -507,10 +492,7 @@ function countRange(from, to){
  */
 function requiredTasks(from, w){
   const end = addDays(w, 6);
-  return state.tasks.filter(task =>
-    (!task.createdAt || task.createdAt <= from) &&
-    (task.archivedAt ? task.archivedAt > end : !task.archived)   // 日付のない旧アーカイブは最初から外す
-  );
+  return state.tasks.filter(task => task.createdAt <= from && (!task.archived || task.archivedAt > end));
 }
 /** from〜to（両端含む）に一度もやっていない必須タスク */
 function missingTasks(from, to, w){

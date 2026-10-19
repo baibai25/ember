@@ -203,6 +203,68 @@ console.log('\n― 週に必須のタスク ―');
   ok('日付のない旧アーカイブは必須にしない', marks(a)[2] === 'earn', marks(a).join(','));
 }
 
+{
+  // タスクを登録する前の週を記録しても、必須タスクのない週ではシールドを獲得しない
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-19' })];
+  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-02', '2026-08-15'), span('2026-08-16', '2026-08-21')) }), '2026-08-21');
+  ok('必須タスクのない週ではシールドを獲得しない', stats(a).sh === '0 枚', JSON.stringify(stats(a)));
+  ok('必須タスクのない週は判定しない（結果列は空欄）', marks(a).slice(0, 3).join(',') === ',,', marks(a).join(','));
+  ok('判定しない週は連続も切らない（14+6=20）', a.html('hero').includes('class="bignum">20<'), a.html('hero').slice(0, 80));
+}
+{
+  // 必須タスクがなくても、空白日のある週はこれまでどおり −1 かリセット
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-19' })];
+  const a = boot(base({ tasks, logs: Object.assign(without(span('2026-08-09', '2026-08-15'), '2026-08-12'), span('2026-08-16', '2026-08-21')) }), '2026-08-21');
+  ok('必須タスクがなくても空白日のある週はリセット', marks(a)[2] === 'reset', marks(a).join(','));
+}
+{
+  // 今週の必須タスクが1つもないとき（今週タスクを入れ替えた）は「判定なし」
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-18' })];
+  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-09', '2026-08-15', ['old']), span('2026-08-16', '2026-08-21')) }), '2026-08-21');
+  ok('今週の必須タスクがなければ 判定なし', outlook(a) === '判定なし', String(outlook(a)));
+}
+{
+  // 登録後に過去の土曜を1日だけ埋める（レビューで再現した手順）
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-19' })];
+  const a = boot(base({ tasks, logs: span('2026-08-19', '2026-08-21') }), '2026-08-21');
+  [...a.w.document.querySelectorAll('.cell')].find(c => day(c) === '15').click();
+  a.w.document.querySelector('#sheet-body .toggle').click();
+  ok('登録前の日を埋めてもシールドは増えない', stats(a).sh === '0 枚', JSON.stringify(stats(a)));
+}
+
+console.log('\n― アーカイブしたタスクの過去日 ―');
+{
+  // 8/9週に必須だった懸垂を、あとでアーカイブした。8/12 のシートから記録を直せる
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-21' })];
+  const logs = Object.assign(span('2026-08-09', '2026-08-21'), { '2026-08-10': ['t1', 't2'] });
+  const a = boot(base({ tasks, logs }), '2026-08-21');
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '12').click();
+  const names = () => [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent);
+  ok('その週に必須だったアーカイブ済みタスクがシートに出る', names().join(',') === 'スクワット,懸垂（アーカイブ済み）', names().join(','));
+  ok('前提：懸垂をやった8/9週は獲得', marks(a)[2] === 'earn', marks(a).join(','));
+}
+{
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-21' })];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('前提：懸垂をやっていない8/9週はリセット', marks(a)[2] === 'reset', marks(a).join(','));
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '12').click();
+  a.w.document.querySelectorAll('#sheet-body .toggle')[1].click();
+  ok('アーカイブ済みタスクを過去日に記録して週を直せる', marks(a)[2] === 'earn', marks(a).join(','));
+  ok('週の結果がシートの文にも反映される', a.text('sheet-body').includes('この週はシールドを1枚獲得しました。'), a.text('sheet-body'));
+}
+{
+  // その週に必須でなくても、その日に記録があるアーカイブ済みタスクは出す（取り消せるように）
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-11' })];
+  const logs = Object.assign(span('2026-08-16', '2026-08-21'), { '2026-08-17': ['t1', 't2'] });
+  const a = boot(base({ tasks, logs }), '2026-08-21');
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '17').click();
+  const names = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent);
+  ok('記録のあるアーカイブ済みタスクはシートに出る', names.includes('懸垂（アーカイブ済み）'), names.join(','));
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '18').click();
+  const names2 = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent);
+  ok('必須でも記録もないアーカイブ済みタスクは出さない', names2.join(',') === 'スクワット', names2.join(','));
+}
+
 console.log('\n― 今週の見込み ―');
 {
   const a = boot(base({ tasks: TWO, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');

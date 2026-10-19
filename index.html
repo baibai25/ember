@@ -435,17 +435,6 @@ function normalize(s){
   delete out.shieldsConsumed;
   delete out.meta.lastCheckedDate;
   delete out.meta.bestStreak;
-  // 追加日のないタスクは、最初に記録した日（記録がなければ今日）に追加したものとみなす。
-  // そうしないと、タスクを足す前の週まで「やらなかった週」になり、連続が不当に減る
-  const nowDay = iso(new Date(Date.now() - out.settings.dayBoundaryHour*3600000));
-  out.tasks = (out.tasks || []).map(task => {
-    if(task.createdAt) return task;
-    let first = null;
-    for(const d of Object.keys(out.logs || {})){
-      if(Array.isArray(out.logs[d]) && out.logs[d].includes(task.id) && (!first || d < first)) first = d;
-    }
-    return Object.assign({}, task, { createdAt: first || nowDay });
-  });
   return out;
 }
 function load(){
@@ -494,22 +483,14 @@ function taskCounts(){
   return c;
 }
 function isDone(date){ return doneCount(date) > 0; }
-/** 達成した日。未来日のログ（復元データ由来）は数えない */
-function doneDates(){ const t = today(); return Object.keys(state.logs).filter(d => d <= t && isDone(d)); }
-function doneDays(){ return doneDates().length; }
+/** 達成日数。未来日のログ（復元データ由来）は数えない */
+function doneDays(){ const t = today(); return Object.keys(state.logs).filter(d => d <= t && isDone(d)).length; }
 /** その日を含む週の日曜。カレンダーと同じく日曜始まり */
 function weekStart(s){ return addDays(s, -parseISO(s).getDay()); }
 /** 最初の達成日。記録が1件もなければ null */
 function firstDate(){
-  return doneDates().reduce((min,d)=> !min || d < min ? d : min, null);
-}
-/** 週 w の判定開始日。最初の週だけは最初の記録日から */
-function weekFrom(w, first){ return first && w < first ? first : w; }
-/** from〜to（両端含む）にタスクごとに何日やったか */
-function countRange(from, to){
-  const c = Object.create(null);
-  for(let d = from; d <= to; d = addDays(d,1)) for(const id of state.logs[d] || []) c[id] = (c[id] || 0) + 1;
-  return c;
+  const t = today();
+  return Object.keys(state.logs).filter(d => d <= t && isDone(d)).reduce((min,d)=> !min || d < min ? d : min, null);
 }
 
 /**
@@ -525,8 +506,9 @@ function requiredTasks(from, w){
 }
 /** from〜to（両端含む）に一度もやっていない必須タスク */
 function missingTasks(from, to, w){
-  const did = countRange(from, to);
-  return requiredTasks(from, w).filter(task => !did[task.id]);
+  const did = new Set();
+  for(let d = from; d <= to; d = addDays(d,1)) for(const id of state.logs[d] || []) did.add(id);
+  return requiredTasks(from, w).filter(task => !did.has(task.id));
 }
 
 /**
@@ -537,13 +519,13 @@ function missingTasks(from, to, w){
  */
 function history(){
   const t = today(), first = firstDate();
-  const h = { first, streak:0, best:0, shields:0, protected:0, weeks:{}, gap:false, missing:[] };
+  const h = { streak:0, best:0, shields:0, protected:0, weeks:{}, gap:false, missing:[] };
+  if(!first) return h;
 
-  // 記録がまだなければ今日が最初の記録日になる（今週の必須タスクを出すため）
-  const start = first || t, cur = weekStart(t);
+  const cur = weekStart(t);
   let run = 0;
-  for(let w = weekStart(start); w <= cur; w = addDays(w,7)){
-    const from = weekFrom(w, start);
+  for(let w = weekStart(first); w <= cur; w = addDays(w,7)){
+    const from = w < first ? first : w;
     const end = w === cur ? t : addDays(w,6);
     let gap = false;
     for(let d = from; d <= end; d = addDays(d,1)){
@@ -553,14 +535,15 @@ function history(){
     const missing = missingTasks(from, end, w);
     if(w === cur){ h.gap = gap; h.missing = missing; break; }   // 今週はまだ判定しない
 
-    // 必須タスクが1つもない週は獲得にならない（タスクを足す前の週を埋めてシールドを稼げないように）
-    if(!gap && requiredTasks(from, w).length && !missing.length){ h.shields++; h.weeks[w] = 'earn'; }
+    if(!gap && !missing.length){ h.shields++; h.weeks[w] = 'earn'; }
     else if(h.shields > 0){ h.shields--; h.protected++; h.weeks[w] = 'protect'; }
     else { run = 0; h.weeks[w] = 'reset'; }
   }
   h.streak = run;
   return h;
 }
+function streak(){ return history().streak; }
+
 /** 今週の見込み。ホームの「今週」欄に出す */
 function weekOutlook(h){
   if(h.gap) return h.shields ? '−1 枚 見込み' : '週末でリセット';
@@ -568,7 +551,11 @@ function weekOutlook(h){
   return '+1 枚 見込み';
 }
 /** 今週（日曜〜今日）にタスクごとに何日やったか */
-function weekCounts(){ const t = today(); return countRange(weekStart(t), t); }
+function weekCounts(){
+  const t = today(), c = Object.create(null);
+  for(let d = weekStart(t); d <= t; d = addDays(d,1)) for(const id of state.logs[d] || []) c[id] = (c[id] || 0) + 1;
+  return c;
+}
 
 /* ============ 更新 ============ */
 function toggleTask(date, taskId){
@@ -600,8 +587,8 @@ function rampColor(ramp, s){
   return a[1].map((v,i)=> Math.round(v + (b[1][i]-v)*t));
 }
 /** 連続日数に応じて色と熱量を更新する */
-function applyHeat(h){
-  const s = (h || history()).streak;
+function applyHeat(){
+  const s = streak();
   const [r,g,b] = rampColor(isDarkNow() ? RAMP_DARK : RAMP_LIGHT, s);
   const root = document.documentElement.style;
   root.setProperty('--ember', `rgb(${r},${g},${b})`);
@@ -634,16 +621,15 @@ function flash(){
 
 /* ============ 描画 ============ */
 function render(){
-  const h = history();   // 重いので1回だけ計算して使い回す
-  applyHeat(h);
-  renderHero(h);
-  renderTasks(h);
-  renderGrid(h);
-  renderSettings(h);
+  applyHeat();
+  renderHero();
+  renderTasks();
+  renderGrid();
+  renderSettings();
 }
 
-function renderHero(h){
-  const t = today(), s = h.streak, done = isDone(t), el = $('hero');
+function renderHero(){
+  const t = today(), h = history(), s = h.streak, done = isDone(t), el = $('hero');
   $('hint').textContent = state.tasks.filter(x=>!x.archived).length ? '長押しで記録' : '';
 
   if(done){
@@ -670,12 +656,13 @@ function renderHero(h){
   }
 }
 
-function renderTasks(h){
+function renderTasks(){
   const t = today(), ul = $('tasks');
   const list = state.tasks.filter(x=>!x.archived).sort((a,b)=>a.order-b.order);
   const counts = weekCounts();
-  // 今週の判定に入るタスク（history() と同じ判定）
-  const due = new Set(h.missing.map(x=>x.id));
+  // 今週の判定に入るタスク。記録がまだなければ今日が最初の記録日になる
+  const w = weekStart(t), first = firstDate() || t;
+  const due = new Set(requiredTasks(w < first ? first : w, w).map(x=>x.id));
   ul.innerHTML = '';
 
   if(!list.length){
@@ -724,23 +711,23 @@ function renderTasks(h){
 let gridMonth = null;
 
 /** 記録が残っている最も古い月。1件もなければ今月 */
-function firstRecordMonth(h){
-  return ym(h.first || today());
+function firstRecordMonth(){
+  return ym(firstDate() || today());
 }
 
 /** 週の結果列の表記 */
 const WEEK_MARK = {
-  earn:    ['+1', 'シールドを1枚獲得した週',            'シールドを1枚獲得しました。'],
-  protect: ['−1', 'シールドを1枚使って連続を維持した週', 'シールドを1枚使って連続を維持しました。'],
-  reset:   ['×',  '連続がリセットされた週',            '連続がリセットされました。']
+  earn:    ['+1', 'シールドを1枚獲得した週'],
+  protect: ['−1', 'シールドを1枚使って連続を維持した週'],
+  reset:   ['×',  '連続がリセットされた週']
 };
 
-function renderGrid(h){
+function renderGrid(){
   const t = today(), grid = $('grid');
-  const weeks = h.weeks;
+  const weeks = history().weeks;
 
   // 記録のある月より前と、来月以降には行けない
-  const cur = ym(t), min = firstRecordMonth(h);
+  const cur = ym(t), min = firstRecordMonth();
   if(!gridMonth || gridMonth > cur) gridMonth = cur;
   if(gridMonth < min) gridMonth = min;
 
@@ -797,7 +784,7 @@ function renderGrid(h){
   }
 }
 
-function renderSettings(h){
+function renderSettings(){
   const box = $('task-editor');
   const list = state.tasks.filter(x=>!x.archived).sort((a,b)=>a.order-b.order);
   box.innerHTML = '';
@@ -830,6 +817,7 @@ function renderSettings(h){
 
   $('theme').value = state.settings.theme || 'system';
   $('boundary').value = String(state.settings.dayBoundaryHour);
+  const h = history();
   $('s-days').textContent = doneDays() + ' 日';
   $('s-sh').textContent   = h.shields + ' 枚';
   $('s-best').textContent = h.best + ' 日';
@@ -909,12 +897,8 @@ function closeSheet(){
 }
 function renderSheet(){
   const body = $('sheet-body');
-  const h = history();
+  const list = state.tasks.filter(x=>!x.archived).sort((a,b)=>a.order-b.order);
   const cur = state.logs[sheetDate] || [];
-  // アーカイブ済みでも、その週の必須だったタスクと、その日に記録のあるタスクは直せるように出す
-  const w = weekStart(sheetDate);
-  const req = new Set(requiredTasks(weekFrom(w, h.first), w).map(x=>x.id));
-  const list = state.tasks.filter(x=>!x.archived || req.has(x.id) || cur.includes(x.id)).sort((a,b)=>a.order-b.order);
   body.innerHTML = '';
 
   if(!list.length){ body.innerHTML = '<p class="note">タスクがありません。</p>'; return; }
@@ -929,11 +913,15 @@ function renderSheet(){
   });
 
   // その日を含む週の結果。記録を直せば週の結果も計算し直される
-  const r = h.weeks[w];
+  const r = history().weeks[weekStart(sheetDate)];
   if(r){
     const p = document.createElement('p');
     p.className = 'note';
-    p.textContent = 'この週は' + WEEK_MARK[r][2];
+    p.textContent = 'この週は' + {
+      earn:    'シールドを1枚獲得しました。',
+      protect: 'シールドを1枚使って連続を維持しました。',
+      reset:   '連続がリセットされました。'
+    }[r];
     body.appendChild(p);
   }
 }
@@ -948,13 +936,13 @@ async function backup(){
 
   // iOSでは共有シート経由が最も確実（「ファイルに保存」を選べる）
   if(navigator.canShare && navigator.canShare({ files:[file] })){
-    try{ await navigator.share({ files:[file], title:name }); renderSettings(history()); return; }catch(e){ if(e.name==='AbortError'){ return; } }
+    try{ await navigator.share({ files:[file], title:name }); renderSettings(); return; }catch(e){ if(e.name==='AbortError'){ return; } }
   }
   const url = URL.createObjectURL(file);
   const a = document.createElement('a');
   a.href = url; a.download = name; a.click();
   setTimeout(()=>URL.revokeObjectURL(url), 4000);
-  renderSettings(history());
+  renderSettings();
 }
 function restore(file){
   const r = new FileReader();
@@ -997,8 +985,8 @@ $('backup').onclick = backup;
 $('restore-btn').onclick = ()=> $('restore').click();
 $('restore').onchange = e=>{ if(e.target.files[0]) restore(e.target.files[0]); e.target.value=''; };
 $('backdrop').onclick = closeSheet;
-$('grid-prev').onclick = ()=>{ gridMonth = ymShift(gridMonth,-1); renderGrid(history()); };
-$('grid-next').onclick = ()=>{ gridMonth = ymShift(gridMonth,+1); renderGrid(history()); };
+$('grid-prev').onclick = ()=>{ gridMonth = ymShift(gridMonth,-1); renderGrid(); };
+$('grid-next').onclick = ()=>{ gridMonth = ymShift(gridMonth,+1); renderGrid(); };
 
 // バックグラウンドから復帰したとき、日付が変わっていれば作り直す
 let renderedDate = null;

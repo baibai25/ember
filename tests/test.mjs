@@ -536,12 +536,15 @@ console.log('\n― タスクの今週の回数 ―');
   const logs = Object.assign(span('2026-08-16', '2026-08-21'), { '2026-08-18': {}, '2026-08-19': 'broken' });
   const a = boot(base({ logs }), '2026-08-21');
   ok('配列でない記録があっても描画できる', a.w.document.querySelectorAll('.cell').length > 0 && a.text('hero') !== '', a.text('hero').slice(0, 40));
-  // 文字列の記録は達成日に数えない（8/16〜8/21 のうち 8/18・8/19 が欠ける → 連続は4）
-  ok('配列でない記録は達成日に数えない', a.html('hero').includes('class="bignum">4<'), a.html('hero').slice(0, 80));
-  // その日をシートで押してもエラーにならず、記録できる
+  // {} は記録なし、1つだけの文字列は1件の記録として扱う（8/18 だけ欠ける → 連続は 2+3=5）
+  ok('配列でない記録は1件の記録として扱い、中身のないものは捨てる', a.html('hero').includes('class="bignum">5<'), a.html('hero').slice(0, 80));
+  // どのタスクにも当てはまらない 'broken' はシートに「削除されたタスク」として出て、消せる
   [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '19').click();
-  a.w.document.querySelector('#sheet-body .toggle').click();
-  ok('配列でない記録の日もシートから記録できる', JSON.stringify(a.state().logs['2026-08-19']) === '["t1"]', JSON.stringify(a.state().logs['2026-08-19']));
+  const labels = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent).join(',');
+  ok('文字列だった記録もシートに出る', labels === 'スクワット10回,（削除されたタスク）', labels);
+  a.w.document.querySelectorAll('#sheet-body .toggle')[1].click();
+  a.w.document.querySelectorAll('#sheet-body .toggle')[0].click();
+  ok('シートから直せる', JSON.stringify(a.state().logs['2026-08-19']) === '["t1"]', JSON.stringify(a.state().logs['2026-08-19']));
 }
 {
   // logs や tasks の形が壊れていても起動できる
@@ -925,6 +928,14 @@ console.log('\n― 月めくり ―');
   el.dispatchEvent(new a.w.MouseEvent('pointerup', { bubbles: true, clientX: 20, clientY: 20 }));
   ok('id に " が入っていても記録でき、エラーにならない', JSON.stringify(a.state().logs['2026-08-21']) === '["t\\"1"]' && !errors.length,
      JSON.stringify(a.state().logs) + ' ' + errors.join('/'));
+}
+{
+  // 数値の id や、配列でない1件だけの記録でも、タスクと記録を失わない
+  const a = boot(base({ tasks: [{ id: 1, name: 'スクワット', order: 0, archived: false, createdAt: '2026-08-16' }],
+    logs: Object.assign(span('2026-08-16', '2026-08-20', [1]), { '2026-08-21': 1 }) }), '2026-08-21');
+  ok('数値の id でもタスクと記録を読み込める', a.w.document.querySelectorAll('.task').length === 1 && a.html('hero').includes('class="bignum">6<'), a.html('hero').slice(0, 80));
+  a.w.document.querySelector('.cell.today').click();
+  ok('読み込んだ記録はシートで操作できる', a.w.document.querySelector('#sheet-body .toggle').classList.contains('on'), a.text('sheet-body'));
 }
 {
   // 登録日が文字列でなくても読み込みで落ちず、ほかのデータが消えない

@@ -440,17 +440,19 @@ function normalize(s){
   });
   if(!BOUNDARY_HOURS.includes(out.settings.dayBoundaryHour)) out.settings.dayBoundaryHour = def.dayBoundaryHour;
   if(!THEMES.includes(out.settings.theme)) out.settings.theme = def.theme;
+  // id は文字列にそろえる（数値の id を捨てると、そのタスクと記録がすべて消えるため）
+  const toId = id => typeof id === 'string' ? id : typeof id === 'number' ? String(id) : null;
   // tasks は id を持つものだけ。アーカイブは真偽値にそろえ、並び順は今の並びのまま
   // 0 から振り直す（欠けや重複があると上下ボタンで並べ替えられないため）
   out.tasks = (Array.isArray(out.tasks) ? out.tasks : [])
-    .filter(task => task && typeof task.id === 'string')
+    .filter(task => task && toId(task.id) !== null)
     .map((task, i) => ({ task, i, o: Number.isFinite(task.order) ? task.order : Infinity }))
     .sort((a, b) => (a.o - b.o) || (a.i - b.i))
     .map(({ task }, order) => {
-      const out = Object.assign({}, task, { order, archived: task.archived === true });
+      const clean = Object.assign({}, task, { id: toId(task.id), order, archived: task.archived === true });
       // 正しくない日付は持たない（年の打ち間違いで使い始めた日が大昔になり、何万週もたどらないように）
-      for(const k of ['createdAt', 'archivedAt']) if(!isDateKey(out[k]) || out[k] < MIN_DATE) delete out[k];
-      return out;
+      for(const k of ['createdAt', 'archivedAt']) if(!isDateKey(clean[k]) || clean[k] < MIN_DATE) delete clean[k];
+      return clean;
     });
   // logs は「正しい日付 → 重複のない id の配列（空でない）」だけ。
   // どのタスクにも当てはまらない id も捨てない（tasks が壊れていると記録がすべて消えるため）。
@@ -458,7 +460,8 @@ function normalize(s){
   const logs = {};
   if(out.logs && typeof out.logs === 'object'){
     for(const [d, ids] of Object.entries(out.logs)){
-      const list = Array.isArray(ids) ? [...new Set(ids.filter(id => typeof id === 'string'))] : [];
+      // 1つだけの id が配列でなく書かれていても、配列として扱う
+      const list = [...new Set((Array.isArray(ids) ? ids : [ids]).map(toId).filter(id => id !== null))];
       if(isDateKey(d) && d >= MIN_DATE && list.length) logs[d] = list;
     }
   }
@@ -514,14 +517,14 @@ function weekStart(s){ return addDays(s, -parseISO(s).getDay()); }
 function firstDate(){
   return doneDates().reduce((min,d)=> !min || d < min ? d : min, null);
 }
+/** 登録した日のうちにアーカイブしたタスク（打ち間違いの取り消し） */
+function isTypo(task){ return task.archived && task.archivedAt <= task.createdAt; }
 /**
  * 使い始めた日 = 最初にタスクを登録した日。最初の週はこの日から判定する。
  * 記録によって動かないので、あとから記録を足して結果が悪くなることがない。
  * 登録した日にアーカイブし、記録も1件もないタスク（打ち間違いの取り消し）は使っていないので数えない。
  * タスクがまだなければ今日
  */
-/** 登録した日のうちにアーカイブしたタスク（打ち間違いの取り消し） */
-function isTypo(task){ return task.archived && task.archivedAt <= task.createdAt; }
 function startDate(t){
   const logged = new Set(Object.values(state.logs).flat());
   return state.tasks
@@ -579,7 +582,8 @@ function history(){
   if(memo && memo.state === state && memo.revision === revision && memo.t === t) return memo.h;
 
   const first = firstDate(), start = startDate(t), cur = weekStart(t);
-  const h = { first, start, streak:0, best:0, shields:0, protected:0, weeks:{}, requiredIds:{}, gap:false, required:[], requiredSet:new Set(), missing:[], counts:{} };
+  // gap / from / required / requiredSet / missing / counts は、ループが必ず今週に着いて入れる
+  const h = { first, start, streak:0, best:0, shields:0, protected:0, weeks:{}, requiredIds:{} };
   let run = 0;
   for(let w = weekStart(start); w <= cur; w = addDays(w,7)){
     const from = weekFrom(w, start);

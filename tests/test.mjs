@@ -474,6 +474,36 @@ console.log('\n― タスクの今週の回数 ―');
   ok('logs が null でも起動できる', a.html('hero').includes('>0</span> 日連続'), a.html('hero').slice(0, 80));
 }
 {
+  // 区切り時刻が数字でなくても固まらない（既定の午前4時に戻す）
+  const seed = base({ logs: span('2026-08-16', '2026-08-21') }); seed.settings.dayBoundaryHour = 'x';
+  const a = boot(seed, '2026-08-21');
+  ok('区切り時刻が壊れていても起動できる', a.html('hero').includes('class="bignum">6<'), a.html('hero').slice(0, 80));
+  a.w.document.getElementById('nav-settings').click();
+  ok('区切り時刻は既定の4時に戻る', a.w.document.getElementById('boundary').value === '4', a.w.document.getElementById('boundary').value);
+}
+{
+  // タスクの中身が壊れていても起動できる
+  const a = boot(base({ tasks: [null, 'x', { name: 'idなし' }, TASKS[0]], logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  ok('null や id のないタスクは読み飛ばす', a.w.document.querySelectorAll('.task').length === 1 && a.html('hero').includes('class="bignum">6<'), a.html('hero').slice(0, 80));
+  a.w.document.getElementById('nav-settings').click();
+  a.w.document.getElementById('new-task').value = '懸垂';
+  a.w.document.getElementById('add-task').click();
+  ok('壊れたタスクがあってもタスクを追加できる', a.state().tasks.length === 2, JSON.stringify(a.state().tasks));
+}
+{
+  // 日付として正しくないキーや、文字列でない id は捨てる
+  const logs = Object.assign(span('2026-08-20', '2026-08-21'), { '2020-1-1x': ['t1'], '2026-8-1': ['t1'], '2026-02-30': ['t1'], '2026-08-19': [null] });
+  const a = boot(base({ logs }), '2026-08-21');
+  ok('正しくない日付キーがあっても連続が出る', a.html('hero').includes('class="bignum">2<'), a.html('hero').slice(0, 80));
+  ok('正しくない日付キーは保存し直すと消える', (a.w.document.querySelector('.cell.today').click(), a.w.document.querySelector('#sheet-body .toggle').click(), Object.keys(a.state().logs).join(',') === '2026-08-20'), Object.keys(a.state().logs).join(','));
+}
+{
+  // 未来日のログは通算回数にも数えない（達成日数とそろえる）
+  const a = boot(base({ logs: Object.assign(span('2026-08-20', '2026-08-21'), { '2026-09-30': ['t1'] }) }), '2026-08-21');
+  ok('未来日のログは通算回数に数えない', a.w.document.querySelector('#task-editor .tally').textContent === '通算 2 回' && stats(a).days === '2 日',
+     a.w.document.querySelector('#task-editor .tally').textContent + ' / ' + stats(a).days);
+}
+{
   // 壊れたバックアップを復元しても、その後の起動が止まらない
   const a = boot(base({ logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
   a.w.confirm = () => true; a.w.alert = () => {};

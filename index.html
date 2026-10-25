@@ -474,7 +474,7 @@ function load(){
     return raw ? normalize(JSON.parse(raw)) : blank();
   }catch(e){ return blank(); }
 }
-/** 保存のたびに増える。history() の使い回しを捨てる目印 */
+/** 保存のたびに増える。computeHistory() の使い回しを捨てる目印 */
 let revision = 0;
 function save(){
   revision++;
@@ -522,13 +522,13 @@ function isTypo(task){ return task.archived && task.archivedAt <= task.createdAt
 /**
  * 使い始めた日 = 最初にタスクを登録した日。最初の週はこの日から判定する。
  * 記録によって動かないので、あとから記録を足して結果が悪くなることがない。
- * 登録した日にアーカイブし、記録も1件もないタスク（打ち間違いの取り消し）は使っていないので数えない。
+ * 登録した日のうちにアーカイブしたタスク（打ち間違いの取り消し）は、記録の有無にかかわらず数えない
+ * （記録で判断すると、記録の足し引きで使い始めた日が動いてしまうため）。
  * タスクがまだなければ今日
  */
 function startDate(t){
-  const logged = new Set(Object.values(state.logs).flat());
   return state.tasks
-    .filter(task => logged.has(task.id) || !isTypo(task))
+    .filter(task => !isTypo(task))
     .reduce((min, task) => task.createdAt < min ? task.createdAt : min, t);
 }
 /** 週 w の判定開始日。最初の週だけは start（使い始めた日）から */
@@ -577,7 +577,7 @@ function taskLabel(task, date, h){
  * 全週をたどるので、保存か日付の変化があるまでは前回の結果を使い回す
  */
 let memo = null;
-function history(){
+function computeHistory(){
   const t = today();
   if(memo && memo.state === state && memo.revision === revision && memo.t === t) return memo.h;
 
@@ -650,7 +650,7 @@ function rampColor(ramp, s){
 }
 /** 連続日数に応じて色と熱量を更新する */
 function applyHeat(h){
-  const s = (h || history()).streak;
+  const s = (h || computeHistory()).streak;
   const [r,g,b] = rampColor(isDarkNow() ? RAMP_DARK : RAMP_LIGHT, s);
   const root = document.documentElement.style;
   root.setProperty('--ember', `rgb(${r},${g},${b})`);
@@ -683,7 +683,7 @@ function flash(){
 
 /* ============ 描画 ============ */
 function render(){
-  const h = history();   // 重いので1回だけ計算して使い回す
+  const h = computeHistory();   // 重いので1回だけ計算して使い回す
   applyHeat(h);
   renderHero(h);
   renderTasks(h);
@@ -964,7 +964,7 @@ function closeSheet(){
 }
 function renderSheet(){
   const body = $('sheet-body');
-  const h = history();
+  const h = computeHistory();
   const cur = state.logs[sheetDate] || [];
   const w = weekStart(sheetDate);
   // アーカイブ済みでも、その日に関わるタスクは直せるように出す。
@@ -1005,13 +1005,13 @@ async function backup(){
 
   // iOSでは共有シート経由が最も確実（「ファイルに保存」を選べる）
   if(navigator.canShare && navigator.canShare({ files:[file] })){
-    try{ await navigator.share({ files:[file], title:name }); renderSettings(history()); return; }catch(e){ if(e.name==='AbortError'){ return; } }
+    try{ await navigator.share({ files:[file], title:name }); renderSettings(computeHistory()); return; }catch(e){ if(e.name==='AbortError'){ return; } }
   }
   const url = URL.createObjectURL(file);
   const a = document.createElement('a');
   a.href = url; a.download = name; a.click();
   setTimeout(()=>URL.revokeObjectURL(url), 4000);
-  renderSettings(history());
+  renderSettings(computeHistory());
 }
 function restore(file){
   const r = new FileReader();
@@ -1054,8 +1054,8 @@ $('backup').onclick = backup;
 $('restore-btn').onclick = ()=> $('restore').click();
 $('restore').onchange = e=>{ if(e.target.files[0]) restore(e.target.files[0]); e.target.value=''; };
 $('backdrop').onclick = closeSheet;
-$('grid-prev').onclick = ()=>{ gridMonth = ymShift(gridMonth,-1); renderGrid(history()); };
-$('grid-next').onclick = ()=>{ gridMonth = ymShift(gridMonth,+1); renderGrid(history()); };
+$('grid-prev').onclick = ()=>{ gridMonth = ymShift(gridMonth,-1); renderGrid(computeHistory()); };
+$('grid-next').onclick = ()=>{ gridMonth = ymShift(gridMonth,+1); renderGrid(computeHistory()); };
 
 // バックグラウンドから復帰したとき、日付が変わっていれば作り直す
 let renderedDate = null;

@@ -952,13 +952,28 @@ console.log('\n― 月めくり ―');
   ok('使い始めた日は正しい登録日から', marks(a).every(m => m === '') && a.html('hero').includes('class="bignum">6<'), marks(a).join(',') + ' ' + (Date.now() - t0) + 'ms');
 }
 {
-  // 登録して記録した日にアーカイブしたタスクは、打ち間違い扱いにしない（その日の記録を数える）
+  // 登録した日にアーカイブしたタスクは、記録があっても打ち間違い扱い（記録の足し引きで起点が動かないように）
   const tasks = [
     { id: 'a', name: 'A', order: 0, archived: true, createdAt: '2026-08-19', archivedAt: '2026-08-19' },
     Object.assign({}, TASKS[0], { order: 1, createdAt: '2026-08-20' })
   ];
   const a = boot(base({ tasks, logs: Object.assign({ '2026-08-19': ['a'] }, span('2026-08-20', '2026-08-21')) }), '2026-08-21');
-  ok('記録のあるタスクは当日アーカイブしても使い始めた日に数える', a.html('hero').includes('class="bignum">3<'), a.html('hero').slice(0, 80));
+  ok('登録した日にアーカイブしたタスクは、記録があっても使い始めた日に数えない', a.html('hero').includes('class="bignum">2<'), a.html('hero').slice(0, 80));
+}
+{
+  // 記録を足しても使い始めた日は動かず、過去の週の結果が悪くならない
+  const tasks = [
+    { id: 'a', name: 'A', order: 0, archived: true, createdAt: '2026-08-17', archivedAt: '2026-08-17' },
+    Object.assign({}, TASKS[0], { order: 1, createdAt: '2026-08-19' })
+  ];
+  const without_ = boot(base({ tasks, logs: span('2026-08-19', '2026-08-22') }), '2026-08-23');
+  const with_ = boot(base({ tasks, logs: Object.assign({ '2026-08-17': ['a'] }, span('2026-08-19', '2026-08-22')) }), '2026-08-23');
+  ok('打ち間違いタスクの記録があってもなくても週の結果は同じ', marks(without_)[3] === 'earn' && marks(with_)[3] === 'earn', marks(without_).join(',') + ' / ' + marks(with_).join(','));
+}
+{
+  // アプリの関数がブラウザの window.history を上書きしない
+  const a = boot(base({}), '2026-08-21');
+  ok('window.history はブラウザのまま', typeof a.w.history === 'object' && typeof a.w.history.pushState === 'function', typeof a.w.history);
 }
 {
   // めくった先の過去日も編集できる

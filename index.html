@@ -939,7 +939,10 @@ function renderSheet(){
   // アーカイブ済みでも、その日に関わるタスクは直せるように出す。
   // どのタスクにも当てはまらない記録（手で編集したデータ由来）も、消せるように出す
   const known = new Set(state.tasks.map(x=>x.id));
-  const rows = tasksForDay(sheetDate, h, true).map(task => ({ id: task.id, label: task.name + (task.archived ? '（アーカイブ済み）' : '') }))
+  // 今週の判定にまだ入るアーカイブ済みタスクは、ホームと同じく「今週まで」と出す
+  const thisWeek = w === weekStart(today());
+  const archivedLabel = task => thisWeek && h.requiredSet.has(task.id) ? '（今週まで）' : '（アーカイブ済み）';
+  const rows = tasksForDay(sheetDate, h, true).map(task => ({ id: task.id, label: task.name + (task.archived ? archivedLabel(task) : '') }))
     .concat(cur.filter(id => !known.has(id)).map(id => ({ id, label: '（削除されたタスク）' })));
   body.innerHTML = '';
 

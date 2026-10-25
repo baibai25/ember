@@ -208,6 +208,14 @@ console.log('\n― 週に必須のタスク ―');
   ok('日曜にアーカイブしたタスクはその週から必須でない', marks(a)[2] === 'earn', marks(a).join(','));
 }
 {
+  // 今週の判定にまだ入るアーカイブ済みタスクは、シートでもホームと同じく「今週まで」と出す
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-19' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  a.w.document.querySelector('.cell.today').click();
+  const labels = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent).join(',');
+  ok('シートでも「今週まで」と出す', labels === 'スクワット,懸垂（今週まで）', labels);
+}
+{
   // 今週の日曜にアーカイブしたタスクはホームにも残らず、今週の見込みにも入らない
   const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-16' })];
   const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');

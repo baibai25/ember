@@ -33,7 +33,7 @@
   --bg:var(--paper); --surface:#FFFFFF; --surface2:#F1EEE8;
   --text:var(--ink); --muted:#8B857C; --border:rgba(21,18,14,.13);
   --rule:rgba(21,18,14,.13);
-  --on-ember:#FAF8F4; --gold:#A8761B; --danger:#B3261E; --due:#B03A1A;
+  --on-ember:#FAF8F4; --gold:#7A5410; --danger:#B3261E; --due:#B03A1A;
 
   --serif:ui-serif,"New York","Hiragino Mincho ProN",Georgia,"Times New Roman",serif;
 
@@ -130,7 +130,9 @@ h2{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.2em;margin:
   border-left:1px solid var(--rule);padding-left:12px;text-align:left;
 }
 .stat:first-child{border-left:0;padding-left:0}
-.stat b{display:block;font-size:15px;color:var(--text);margin-top:5px;font-weight:600;letter-spacing:0}
+.stat b{display:block;font-size:15px;color:var(--text);margin-top:5px;font-weight:600;letter-spacing:0;white-space:nowrap}
+/* 「今週」の値は「週末でリセット」など長いので、ほかの欄より広く取る */
+.stat.week{flex:1.5}
 
 /* ---------- tasks ---------- */
 .tasks{list-style:none;margin:0;padding:0}
@@ -222,7 +224,7 @@ h2{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.2em;margin:
 /* 週の結果。獲得は金で塗り、消費は金の枠だけ、リセットは控えめに × */
 .wk{align-self:center;justify-self:center;display:grid;place-items:center;
   width:18px;height:18px;border-radius:999px;
-  font-size:8.5px;font-weight:700;font-style:normal;font-variant-numeric:tabular-nums;color:var(--muted)}
+  font-size:9.5px;font-weight:700;font-style:normal;font-variant-numeric:tabular-nums;color:var(--muted)}
 .wk.earn{background:var(--gold);color:var(--bg)}
 .wk.protect{box-shadow:inset 0 0 0 1.5px var(--gold);color:var(--gold)}
 .wk.reset{font-size:11px;font-weight:400}
@@ -518,10 +520,10 @@ function today(){
 /* ============ 導出値（保存しない） ============ */
 /** その日に消化したタスク数 */
 function doneCount(date){ const l = state.logs[date]; return l ? l.length : 0; }
-/** タスクごとの通算実行回数。連続日数と同じく保存せず、記録から毎回数え直す。未来日のログは数えない */
-function taskCounts(){
+/** タスクごとの通算実行回数。連続日数と同じく保存せず、記録から毎回数え直す。使い始めた日から今日までを数える */
+function taskCounts(h){
   const t = today(), c = Object.create(null);
-  for(const [d, ids] of Object.entries(state.logs)) if(d <= t) for(const id of ids) c[id] = (c[id] || 0) + 1;
+  for(const [d, ids] of Object.entries(state.logs)) if(d >= h.start && d <= t) for(const id of ids) c[id] = (c[id] || 0) + 1;
   return c;
 }
 function isDone(date){ return doneCount(date) > 0; }
@@ -723,7 +725,7 @@ function renderHero(h){
       '<div class="substats">'+
         '<div class="stat">自己ベスト<b>'+h.best+' 日</b></div>'+
         '<div class="stat">シールド<b>'+h.shields+' 枚</b></div>'+
-        '<div class="stat">今週<b>'+weekOutlook(h)+'</b></div>'+
+        '<div class="stat week">今週<b>'+weekOutlook(h)+'</b></div>'+
       '</div>';
     $('tasks-title').textContent = '今日やったこと';
   } else {
@@ -795,7 +797,8 @@ let gridMonth = null;
 
 /** さかのぼれる最も古い月。使い始めた月か、記録のある最も古い月の早いほう */
 function earliestMonth(h){
-  const first = h.first && h.first < h.start ? h.first : h.start;
+  // MIN_DATE より前の記録（年の打ち間違い）までは、さかのぼらせない
+  const first = h.first && h.first >= MIN_DATE && h.first < h.start ? h.first : h.start;
   return ym(first);
 }
 
@@ -877,7 +880,7 @@ function renderSettings(h){
   if(!list.length){
     box.innerHTML = '<p class="note" style="margin:0">まだタスクがありません。</p>';
   }
-  const counts = taskCounts();
+  const counts = taskCounts(h);
   list.forEach((task,i)=>{
     const row = document.createElement('div');
     row.className = 'row';

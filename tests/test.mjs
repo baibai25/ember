@@ -754,6 +754,8 @@ console.log('\n― タスクの今週の回数 ―');
   seed.settings.dayBoundaryHour = 12; seed.settings.theme = 'sepia';
   const a = boot(seed, '2026-08-21');
   ok('古すぎる日付の記録は数えない', a.html('hero').includes('class="bignum">2<') && stats(a).days === '2 日', a.html('hero').slice(0, 80));
+  ok('古すぎる日付の記録は通算回数にも数えない', a.w.document.querySelector('#task-editor .tally').textContent === '通算 2 回', a.w.document.querySelector('#task-editor .tally').textContent);
+  ok('古すぎる日付の記録の月まではさかのぼらない', a.w.document.getElementById('grid-prev').disabled);
   a.w.document.querySelector('.cell.today').click();
   a.w.document.querySelector('#sheet-body .toggle').click();
   ok('古すぎる日付の記録も保存し直したときに消えない', !!a.state().logs['1026-10-20'], JSON.stringify(Object.keys(a.state().logs)));

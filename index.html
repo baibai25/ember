@@ -509,10 +509,21 @@ function weekStart(s){ return addDays(s, -parseISO(s).getDay()); }
 function firstDate(){
   return doneDates().reduce((min,d)=> !min || d < min ? d : min, null);
 }
-/** 週 w の判定開始日。最初の週だけは start（最初の記録日。記録がまだなければ今日）から */
+/**
+ * 使い始めた日 = 最初にタスクを登録した日。最初の週はこの日から判定する。
+ * 記録によって動かないので、あとから記録を足して結果が悪くなることがない。
+ * 登録した日にアーカイブしたタスク（打ち間違いの取り消し）は使っていないので数えない。
+ * タスクがまだなければ今日
+ */
+function startDate(t){
+  return state.tasks
+    .filter(task => !(task.archived && task.archivedAt <= task.createdAt))
+    .reduce((min, task) => task.createdAt < min ? task.createdAt : min, t);
+}
+/** 週 w の判定開始日。最初の週だけは start（使い始めた日）から */
 function weekFrom(w, start){ return w < start ? start : w; }
 /**
- * その週に必須のタスク。from は判定開始日（通常は日曜、最初の週だけは最初の記録日）。
+ * その週に必須のタスク。from は判定開始日（通常は日曜、最初の週だけは使い始めた日）。
  * 判定開始日までに登録していて、判定開始日のうちにはアーカイブしなかったもの。
  * 週の途中でアーカイブしても、その週はまだ必須で翌週から外れる
  * （やらなかったタスクを判定から逃がせないように）。判定開始日にアーカイブすれば、その週から外れる
@@ -550,9 +561,7 @@ function history(){
   const t = today();
   if(memo && memo.state === state && memo.revision === revision && memo.t === t) return memo.h;
 
-  const first = firstDate();
-  // 記録がまだなければ今日が最初の記録日になる（今週の必須タスクを出すため）
-  const start = first || t, cur = weekStart(t);
+  const first = firstDate(), start = startDate(t), cur = weekStart(t);
   const h = { first, streak:0, best:0, shields:0, protected:0, weeks:{}, requiredIds:{}, gap:false, required:[], requiredSet:new Set(), missing:[], counts:{} };
   let run = 0;
   for(let w = weekStart(start); w <= cur; w = addDays(w,7)){

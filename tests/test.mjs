@@ -91,8 +91,8 @@ console.log('\n― 連続日数の計算 ―');
   ok('今日未達でも昨日までの5日は保持', a.html('hero').includes('>5</span>'), a.html('hero').slice(0, 120));
 }
 {
-  // 8/15(土)〜8/19 達成、昨日(8/20)が空白。週の途中なので途切れず、空白日の分だけ増えない
-  const a = boot(base({ logs: daysBack('2026-08-19', 5) }), '2026-08-21');
+  // 8/15(土)に登録して8/15〜8/19 達成、昨日(8/20)が空白。週の途中なので途切れず、空白日の分だけ増えない
+  const a = boot(base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-08-15' })], logs: daysBack('2026-08-19', 5) }), '2026-08-21');
   ok('週の途中の空白日では途切れない（5を保持）', a.html('hero').includes('>5</span> 日連続'), a.html('hero'));
 }
 {
@@ -147,9 +147,34 @@ console.log('\n― 週の判定とシールド ―');
   ok('リセット後は今週の分だけ（6）', a.html('hero').includes('class="bignum">6<'), a.html('hero').slice(0, 80));
 }
 {
-  // 最初の週は最初の記録日（8/12 水）から判定する
-  const a = boot(base({ logs: span('2026-08-12', '2026-08-15') }), '2026-08-22');
-  ok('最初の週は最初の記録日から土曜までで判定する', stats(a).sh === '1 枚', stats(a).sh);
+  // 最初の週は、最初にタスクを登録した日（8/12 水）から判定する
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-12' })];
+  const a = boot(base({ tasks, logs: span('2026-08-12', '2026-08-15') }), '2026-08-22');
+  ok('最初の週はタスクを登録した日から土曜までで判定する', stats(a).sh === '1 枚', stats(a).sh);
+}
+{
+  // 登録した日に何もしなければ、その日も空白日になる（起点は最初の記録日ではない）
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-12' })];
+  const a = boot(base({ tasks, logs: span('2026-08-13', '2026-08-15') }), '2026-08-22');
+  ok('登録した日も空白日に数える', marks(a)[2] === 'reset', marks(a).join(','));
+}
+{
+  // あとから記録を足しても起点は動かない（記録を増やして結果が悪くなることがない）
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-17' })];
+  const a = boot(base({ tasks, logs: span('2026-08-17', '2026-08-22') }), '2026-08-24');
+  ok('前提：登録日から毎日やった最初の週は +1', marks(a)[3] === 'earn', marks(a).join(','));
+  // 登録前の 8/16 はシートに出ないので記録できない。登録後の日を足しても結果は変わらない
+  [...a.w.document.querySelectorAll('.cell')].find(c => day(c) === '16').click();
+  ok('登録前の日は記録できない', a.text('sheet-body') === 'タスクがありません。', a.text('sheet-body'));
+}
+{
+  // 打ち間違えて登録してすぐ消したタスクは、使い始めた日にも数えない
+  const tasks = [
+    { id: 't9', name: 'スクワト', order: 0, archived: true, createdAt: '2026-08-09', archivedAt: '2026-08-09' },
+    Object.assign({}, TASKS[0], { order: 1, createdAt: '2026-08-11' })
+  ];
+  const a = boot(base({ tasks, logs: span('2026-08-11', '2026-08-21') }), '2026-08-21');
+  ok('打ち間違いのタスクは使い始めた日に数えない', marks(a)[2] === 'earn', marks(a).join(','));
 }
 {
   // 日曜になった瞬間に先週分が確定する
@@ -243,23 +268,36 @@ console.log('\n― 週に必須のタスク ―');
 }
 
 {
-  // タスクを登録する前の週を記録しても、必須タスクのない週ではシールドを獲得しない
-  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-19' })];
-  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-02', '2026-08-15'), span('2026-08-16', '2026-08-21')) }), '2026-08-21');
-  ok('必須タスクのない週ではシールドを獲得しない', stats(a).sh === '0 枚', JSON.stringify(stats(a)));
-  ok('必須タスクのない週は判定しない（結果列は空欄）', marks(a).slice(0, 3).join(',') === ',,', marks(a).join(','));
-  ok('判定しない週は連続も切らない（14+6=20）', a.html('hero').includes('class="bignum">20<'), a.html('hero').slice(0, 80));
+  // タスクを入れ替えた週（日曜に全部アーカイブし、火曜に新しく登録）は必須タスクがない。
+  // 空白日がなければ判定しない（+1も−1もしない）
+  const tasks = [
+    Object.assign({}, TASKS[0], { createdAt: '2026-08-02', archived: true, archivedAt: '2026-08-09' }),
+    Object.assign({}, TWO[1], { createdAt: '2026-08-11' })
+  ];
+  const logs = Object.assign(span('2026-08-02', '2026-08-10'), span('2026-08-11', '2026-08-21', ['t2']));
+  const a = boot(base({ tasks, logs }), '2026-08-21');
+  ok('必須タスクのない週ではシールドを獲得しない', stats(a).sh === '1 枚', JSON.stringify(stats(a)));
+  ok('必須タスクのない週は判定しない（結果列は空欄）', marks(a).slice(1, 3).join(',') === 'earn,', marks(a).join(','));
+  ok('判定しない週は連続も切らない（7+7+6=20）', a.html('hero').includes('class="bignum">20<'), a.html('hero').slice(0, 80));
 }
 {
   // 必須タスクがなくても、空白日のある週はこれまでどおり −1 かリセット
-  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-19' })];
-  const a = boot(base({ tasks, logs: Object.assign(without(span('2026-08-09', '2026-08-15'), '2026-08-12'), span('2026-08-16', '2026-08-21')) }), '2026-08-21');
+  const tasks = [
+    Object.assign({}, TASKS[0], { createdAt: '2026-08-09', archived: true, archivedAt: '2026-08-09' }),
+    Object.assign({}, TWO[1], { createdAt: '2026-08-09', archived: true, archivedAt: '2026-08-10' }),
+    Object.assign({}, TWO[0], { id: 't3', createdAt: '2026-08-11' })
+  ];
+  const logs = Object.assign(without(span('2026-08-09', '2026-08-15', ['t3']), '2026-08-12'), span('2026-08-16', '2026-08-21', ['t3']));
+  const a = boot(base({ tasks, logs }), '2026-08-21');
   ok('必須タスクがなくても空白日のある週はリセット', marks(a)[2] === 'reset', marks(a).join(','));
 }
 {
-  // 今週の必須タスクが1つもないとき（今週タスクを入れ替えた）は「判定なし」
-  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-18' })];
-  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-09', '2026-08-15', ['old']), span('2026-08-16', '2026-08-21')) }), '2026-08-21');
+  // 今週の必須タスクが1つもないとき（日曜にアーカイブして、週の途中で新しく登録した）は「判定なし」
+  const tasks = [
+    Object.assign({}, TASKS[0], { createdAt: '2026-08-09', archived: true, archivedAt: '2026-08-16' }),
+    Object.assign({}, TWO[1], { createdAt: '2026-08-18' })
+  ];
+  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-09', '2026-08-17'), span('2026-08-18', '2026-08-21', ['t2'])) }), '2026-08-21');
   ok('今週の必須タスクがなければ 判定なし', outlook(a) === '判定なし', String(outlook(a)));
 }
 {
@@ -566,28 +604,26 @@ console.log('\n― タスクの今週の回数 ―');
   ok('今週の判定に入らないタスクにはそう伝えない', !msgs[1].includes('今週の間だけ残ります'), msgs[1]);
 }
 {
-  // 記録がまだないときは今日が判定の起点。起点までにアーカイブしたタスクは必須でなく、ホームにも出ない
+  // 記録がまだなくても、起点は登録した日（8/17）。それより後にアーカイブしたタスクは今週まだ必須
   const tasks = [
     Object.assign({}, TASKS[0], { createdAt: '2026-08-17', archived: true, archivedAt: '2026-08-18' }),
     Object.assign({}, TWO[1], { createdAt: '2026-08-17', archived: true, archivedAt: '2026-08-19' })
   ];
   const a = boot(base({ tasks }), '2026-08-19');
   const home = [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(',');
-  ok('記録がなければ、今日までにアーカイブしたタスクはホームに出ない', home === '', home);
+  ok('記録がなくても、登録日より後にアーカイブしたタスクはホームに残る', home === 'スクワット10回（今週まで）,懸垂（今週まで）', home);
   [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '18').click();
   const sheet = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent).join(',');
-  // 8/18 の時点ではどちらもまだあったので、その日のシートには両方出る（記録し忘れを直せる）
-  ok('その日にまだあったタスクはシートに出る', sheet === 'スクワット10回（アーカイブ済み）,懸垂（アーカイブ済み）', sheet);
+  ok('シートにもホームと同じく出る', sheet === 'スクワット10回（今週まで）,懸垂（今週まで）', sheet);
 }
 {
-  // 最初の記録日より前にアーカイブしたタスクは、最初の週の必須に入らない
-  // （打ち間違えたタスクを月曜に消して、火曜から記録を始めた）
+  // 登録した日にアーカイブした打ち間違いのタスクは、最初の週の必須に入らない
   const tasks = [
     Object.assign({}, TASKS[0], { createdAt: '2026-08-10' }),
     { id: 't9', name: 'スクワト', order: 1, archived: true, createdAt: '2026-08-10', archivedAt: '2026-08-10' }
   ];
-  const a = boot(base({ tasks, logs: span('2026-08-11', '2026-08-21') }), '2026-08-21');
-  ok('最初の記録日より前にアーカイブしたタスクは必須でない', marks(a)[2] === 'earn', marks(a).join(','));
+  const a = boot(base({ tasks, logs: span('2026-08-10', '2026-08-21') }), '2026-08-21');
+  ok('登録した日にアーカイブしたタスクは最初の週でも必須でない', marks(a)[2] === 'earn', marks(a).join(','));
 }
 {
   // どのタスクにも当てはまらない記録は捨てず、シートに「削除されたタスク」として出して消せるようにする
@@ -813,7 +849,8 @@ console.log('\n― カレンダーの月表示 ―');
   ok('各週の右に結果列が1つずつある', a.w.document.querySelectorAll('#grid .wk').length === cells.length / 7, String(a.w.document.querySelectorAll('#grid .wk').length));
   const kids = [...a.w.document.getElementById('grid').children];
   ok('結果列は土曜のマスの直後に並ぶ', kids.every((e, i) => e.classList.contains(i % 8 === 7 ? 'wk' : 'cell')));
-  ok('記録がなければ結果列はすべて空欄', marks(a).every(m => m === '') && [...a.w.document.querySelectorAll('#grid .wk')].every(e => e.textContent === ''));
+  const fresh = boot(base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-08-21' })] }), '2026-08-21');
+  ok('今日使い始めたなら結果列はすべて空欄', marks(fresh).every(m => m === '') && [...fresh.w.document.querySelectorAll('#grid .wk')].every(e => e.textContent === ''));
 }
 {
   const a = boot(base({ logs: Object.assign(without(span('2026-07-26', '2026-08-08'), '2026-08-05')) }), '2026-08-21');

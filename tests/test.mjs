@@ -239,6 +239,10 @@ console.log('\n― 週に必須のタスク ―');
   a.w.document.querySelector('.cell.today').click();
   const labels = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent).join(',');
   ok('シートでも「今週まで」と出す', labels === 'スクワット,懸垂（今週まで）', labels);
+  // 先週の日のシートでも、今週の判定にまだ入るなら同じく「今週まで」
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '12').click();
+  const past = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent).join(',');
+  ok('先週の日のシートでも「今週まで」と出す', past === 'スクワット,懸垂（今週まで）', past);
 }
 {
   // 今週の日曜にアーカイブしたタスクはホームにも残らず、今週の見込みにも入らない
@@ -326,7 +330,7 @@ console.log('\n― アーカイブしたタスクの過去日 ―');
   const a = boot(base({ tasks, logs }), '2026-08-21');
   [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '12').click();
   const names = () => [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent);
-  ok('その週に必須だったアーカイブ済みタスクがシートに出る', names().join(',') === 'スクワット,懸垂（アーカイブ済み）', names().join(','));
+  ok('その週に必須だったアーカイブ済みタスクがシートに出る（今週の判定にもまだ入るので「今週まで」）', names().join(',') === 'スクワット,懸垂（今週まで）', names().join(','));
   ok('前提：懸垂をやった8/9週は獲得', marks(a)[2] === 'earn', marks(a).join(','));
 }
 {
@@ -731,7 +735,7 @@ console.log('\n― タスクの今週の回数 ―');
   const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
   [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '13').click();
   const labels = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent);
-  ok('存在していた日のシートにはアーカイブ済みタスクが出る', labels.join(',') === 'スクワット10回,懸垂（アーカイブ済み）', labels.join(','));
+  ok('存在していた日のシートにはアーカイブ済みタスクが出る（今週の判定にもまだ入るので「今週まで」）', labels.join(',') === 'スクワット10回,懸垂（今週まで）', labels.join(','));
 }
 {
   // 今日記録したタスクをアーカイブしても、今日の記録はホームから取り消せる

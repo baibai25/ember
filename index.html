@@ -584,11 +584,10 @@ function tasksForDay(date, h, withExisted){
     .sort((a,b)=>a.order-b.order);
 }
 
-/** 一覧に出すタスク名。今週の判定にまだ入るアーカイブ済みタスクは「今週まで」と添える */
-function taskLabel(task, date, h){
+/** 一覧に出すタスク名。今週の判定にまだ入るアーカイブ済みタスクは、どの日の一覧でも「今週まで」と添える */
+function taskLabel(task, h){
   if(!task.archived) return task.name;
-  const stillThisWeek = weekStart(date) === weekStart(today()) && h.requiredSet.has(task.id);
-  return task.name + (stillThisWeek ? '（今週まで）' : '（アーカイブ済み）');
+  return task.name + (h.requiredSet.has(task.id) ? '（今週まで）' : '（アーカイブ済み）');
 }
 
 /**
@@ -772,7 +771,7 @@ function renderTasks(h){
         '<circle class="prog" cx="22" cy="22" r="18"></circle></svg>'+
         '<span class="core">✓</span>'+
       '</span>';
-    li.querySelector('.name').textContent = taskLabel(task, t, h);
+    li.querySelector('.name').textContent = taskLabel(task, h);
     // 今週の回数。週の判定に入るのにまだ0回のタスクだけ色を付ける
     const tally = li.querySelector('.tally');
     tally.textContent = '今週 ' + (counts[task.id] || 0) + ' 回';
@@ -995,7 +994,7 @@ function renderSheet(){
   // アーカイブ済みでも、その日に関わるタスクは直せるように出す。
   // どのタスクにも当てはまらない記録（手で編集したデータ由来）も、消せるように出す
   const known = new Set(state.tasks.map(x=>x.id));
-  const rows = tasksForDay(sheetDate, h, true).map(task => ({ id: task.id, label: taskLabel(task, sheetDate, h) }))
+  const rows = tasksForDay(sheetDate, h, true).map(task => ({ id: task.id, label: taskLabel(task, h) }))
     .concat(cur.filter(id => !known.has(id)).map(id => ({ id, label: '（削除されたタスク）' })));
   body.innerHTML = '';
 

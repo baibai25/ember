@@ -484,7 +484,7 @@ function iso(d){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 /** YYYY-MM-DD の実在する日付か */
-function isDateKey(s){ return /^\d{4}-\d{2}-\d{2}$/.test(s) && iso(parseISO(s)) === s; }
+function isDateKey(s){ return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && iso(parseISO(s)) === s; }
 function parseISO(s){ const p=s.split('-').map(Number); return new Date(p[0],p[1]-1,p[2]); }
 function addDays(s,n){ const d=parseISO(s); d.setDate(d.getDate()+n); return iso(d); }
 function ym(s){ return s.slice(0,7); }
@@ -520,10 +520,12 @@ function firstDate(){
  * 登録した日にアーカイブし、記録も1件もないタスク（打ち間違いの取り消し）は使っていないので数えない。
  * タスクがまだなければ今日
  */
+/** 登録した日のうちにアーカイブしたタスク（打ち間違いの取り消し） */
+function isTypo(task){ return task.archived && task.archivedAt <= task.createdAt; }
 function startDate(t){
   const logged = new Set(Object.values(state.logs).flat());
   return state.tasks
-    .filter(task => logged.has(task.id) || !(task.archived && task.archivedAt <= task.createdAt))
+    .filter(task => logged.has(task.id) || !isTypo(task))
     .reduce((min, task) => task.createdAt < min ? task.createdAt : min, t);
 }
 /** 週 w の判定開始日。最初の週だけは start（使い始めた日）から */
@@ -552,8 +554,15 @@ function tasksForDay(date, h, withExisted){
   const ids = state.logs[date] || [];
   return state.tasks
     .filter(x => ids.includes(x.id) || (x.createdAt <= date && (!x.archived || req.has(x.id) ||
-      (withExisted && x.archivedAt >= date && x.archivedAt > x.createdAt))))
+      (withExisted && x.archivedAt >= date && !isTypo(x)))))
     .sort((a,b)=>a.order-b.order);
+}
+
+/** 一覧に出すタスク名。今週の判定にまだ入るアーカイブ済みタスクは「今週まで」と添える */
+function taskLabel(task, date, h){
+  if(!task.archived) return task.name;
+  const stillThisWeek = weekStart(date) === weekStart(today()) && h.requiredSet.has(task.id);
+  return task.name + (stillThisWeek ? '（今週まで）' : '（アーカイブ済み）');
 }
 
 /**
@@ -707,8 +716,7 @@ function renderHero(h){
 
 function renderTasks(h){
   const t = today(), ul = $('tasks');
-  // 今週アーカイブしたタスクも、今週の判定にまだ入るものは週が終わるまで残す
-  const active = h.requiredSet;
+  // 今週アーカイブしたタスクも、今週の判定にまだ入るものは週が終わるまで残す（tasksForDay）
   const list = tasksForDay(t, h);
   $('hint').textContent = list.length ? '長押しで記録' : '';
   const counts = h.counts;   // 今週タスクごとに何日やったか
@@ -737,7 +745,7 @@ function renderTasks(h){
         '<circle class="prog" cx="22" cy="22" r="18"></circle></svg>'+
         '<span class="core">✓</span>'+
       '</span>';
-    li.querySelector('.name').textContent = task.name + (!task.archived ? '' : active.has(task.id) ? '（今週まで）' : '（アーカイブ済み）');
+    li.querySelector('.name').textContent = taskLabel(task, t, h);
     // 今週の回数。週の判定に入るのにまだ0回のタスクだけ色を付ける
     const tally = li.querySelector('.tally');
     tally.textContent = '今週 ' + (counts[task.id] || 0) + ' 回';
@@ -821,7 +829,7 @@ function renderGrid(h){
     cell.onclick = ()=> openSheet(d);
     grid.appendChild(cell);
 
-    // 土曜のマスの右に、その週の結果を出す（今週と記録より前の週は空欄）
+    // 土曜のマスの右に、その週の結果を出す（今週、使い始めた週より前の週、判定しない週は空欄）
     if(i % 7 === 6){
       const r = weeks[weekStart(d)];
       const wk = document.createElement('div');
@@ -958,10 +966,7 @@ function renderSheet(){
   // アーカイブ済みでも、その日に関わるタスクは直せるように出す。
   // どのタスクにも当てはまらない記録（手で編集したデータ由来）も、消せるように出す
   const known = new Set(state.tasks.map(x=>x.id));
-  // 今週の判定にまだ入るアーカイブ済みタスクは、ホームと同じく「今週まで」と出す
-  const thisWeek = w === weekStart(today());
-  const archivedLabel = task => thisWeek && h.requiredSet.has(task.id) ? '（今週まで）' : '（アーカイブ済み）';
-  const rows = tasksForDay(sheetDate, h, true).map(task => ({ id: task.id, label: task.name + (task.archived ? archivedLabel(task) : '') }))
+  const rows = tasksForDay(sheetDate, h, true).map(task => ({ id: task.id, label: taskLabel(task, sheetDate, h) }))
     .concat(cur.filter(id => !known.has(id)).map(id => ({ id, label: '（削除されたタスク）' })));
   body.innerHTML = '';
 

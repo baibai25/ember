@@ -927,6 +927,12 @@ console.log('\n― 月めくり ―');
      JSON.stringify(a.state().logs) + ' ' + errors.join('/'));
 }
 {
+  // 登録日が文字列でなくても読み込みで落ちず、ほかのデータが消えない
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: ['2026-08-16'] }), Object.assign({}, TWO[1], { createdAt: '2026-08-16' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21', ['t1', 't2']) }), '2026-08-21');
+  ok('文字列でない登録日があってもデータを読み込める', a.w.document.querySelectorAll('.task').length === 2 && a.html('hero').includes('class="bignum">6<'), a.html('hero').slice(0, 80));
+}
+{
   // 登録日の年が壊れていても、使い始めた日が大昔にならない
   const tasks = [Object.assign({}, TASKS[0], { createdAt: '1026-10-01' }), Object.assign({}, TWO[1], { createdAt: '2026-08-16' })];
   const t0 = Date.now();

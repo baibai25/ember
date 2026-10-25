@@ -715,7 +715,7 @@ console.log('\n― タスクの今週の回数 ―');
 }
 {
   // 年を打ち間違えた古すぎる記録は捨てる。画面で選べない設定値も既定値に戻す
-  const seed = base({ logs: Object.assign(span('2026-08-20', '2026-08-21'), { '1026-10-20': ['t1'] }) });
+  const seed = base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-08-20' })], logs: Object.assign(span('2026-08-20', '2026-08-21'), { '1026-10-20': ['t1'] }) });
   seed.settings.dayBoundaryHour = 12; seed.settings.theme = 'sepia';
   const a = boot(seed, '2026-08-21');
   ok('古すぎる日付の記録は捨てる（その月までは遡れない）', a.html('hero').includes('class="bignum">2<') && a.w.document.getElementById('grid-prev').disabled, a.html('hero').slice(0, 80));
@@ -882,7 +882,7 @@ console.log('\n― 月めくり ―');
 }
 {
   // 7月と8月に記録がある → 7月まで戻れる
-  const a = boot(base({ logs: Object.assign(daysBack('2026-07-05', 3), daysBack('2026-08-21', 3)) }), '2026-08-21');
+  const a = boot(base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-07-03' })], logs: Object.assign(daysBack('2026-07-05', 3), daysBack('2026-08-21', 3)) }), '2026-08-21');
   const prev = a.w.document.getElementById('grid-prev');
   const next = a.w.document.getElementById('grid-next');
   ok('初期表示は今月', a.text('grid-title') === '8月', a.text('grid-title'));
@@ -903,9 +903,33 @@ console.log('\n― 月めくり ―');
   ok('今月に戻ると次へは進めない', a.w.document.getElementById('grid-next').disabled);
 }
 {
-  // 記録が1件もなければ、めくる先がない
-  const a = boot(base({}), '2026-08-21');
-  ok('記録がなければ両方とも押せない', a.w.document.getElementById('grid-prev').disabled && a.w.document.getElementById('grid-next').disabled);
+  // 今月使い始めて記録が1件もなければ、めくる先がない
+  const a = boot(base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-08-21' })] }), '2026-08-21');
+  ok('今月使い始めて記録がなければ両方とも押せない', a.w.document.getElementById('grid-prev').disabled && a.w.document.getElementById('grid-next').disabled);
+}
+{
+  // 記録がなくても、使い始めた月まではさかのぼれる（判定済みの週を確かめ、記録し忘れを直せる）
+  const a = boot(base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-07-20' })] }), '2026-08-21');
+  ok('使い始めた月まではさかのぼれる', !a.w.document.getElementById('grid-prev').disabled);
+  a.w.document.getElementById('grid-prev').click();
+  ok('使い始めた月より前へは戻れない', a.text('grid-title') === '7月' && a.w.document.getElementById('grid-prev').disabled, a.text('grid-title'));
+}
+{
+  // 登録日の年が壊れていても、使い始めた日が大昔にならない
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '1026-10-01' }), Object.assign({}, TWO[1], { createdAt: '2026-08-16' })];
+  const t0 = Date.now();
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21', ['t2']) }), '2026-08-21');
+  ok('壊れた登録日は持たない', !('createdAt' in a.w.eval('state').tasks.find(x => x.id === 't1')), JSON.stringify(a.w.eval('state').tasks));
+  ok('使い始めた日は正しい登録日から', marks(a).every(m => m === '') && a.html('hero').includes('class="bignum">6<'), marks(a).join(',') + ' ' + (Date.now() - t0) + 'ms');
+}
+{
+  // 登録して記録した日にアーカイブしたタスクは、打ち間違い扱いにしない（その日の記録を数える）
+  const tasks = [
+    { id: 'a', name: 'A', order: 0, archived: true, createdAt: '2026-08-19', archivedAt: '2026-08-19' },
+    Object.assign({}, TASKS[0], { order: 1, createdAt: '2026-08-20' })
+  ];
+  const a = boot(base({ tasks, logs: Object.assign({ '2026-08-19': ['a'] }, span('2026-08-20', '2026-08-21')) }), '2026-08-21');
+  ok('記録のあるタスクは当日アーカイブしても使い始めた日に数える', a.html('hero').includes('class="bignum">3<'), a.html('hero').slice(0, 80));
 }
 {
   // めくった先の過去日も編集できる

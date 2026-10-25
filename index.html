@@ -442,7 +442,7 @@ function normalize(s){
   });
   if(!BOUNDARY_HOURS.includes(out.settings.dayBoundaryHour)) out.settings.dayBoundaryHour = def.dayBoundaryHour;
   if(!THEMES.includes(out.settings.theme)) out.settings.theme = def.theme;
-  const now = iso(new Date(Date.now() - out.settings.dayBoundaryHour*3600000));   // 今日（state が無いので自前で求める）
+  const now = today(out.settings.dayBoundaryHour);   // 読み込み中は state がまだないので区切り時刻を渡す
   // id は文字列にそろえる（数値の id を捨てると、そのタスクと記録がすべて消えるため）
   const toId = id => typeof id === 'string' ? id : typeof id === 'number' ? String(id) : null;
   // tasks は id を持つものだけ。アーカイブは真偽値にそろえ、並び順は今の並びのまま
@@ -513,8 +513,8 @@ function ym(s){ return s.slice(0,7); }
 function ymShift(s,n){ const p=s.split('-').map(Number); const d=new Date(p[0],p[1]-1+n,1);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 /** 午前4時区切りを反映した「今日」 */
-function today(){
-  return iso(new Date(Date.now() - state.settings.dayBoundaryHour*3600000));
+function today(hour = state.settings.dayBoundaryHour){
+  return iso(new Date(Date.now() - hour*3600000));
 }
 
 /* ============ 導出値（保存しない） ============ */
@@ -535,7 +535,8 @@ function doneDays(h){ return doneDates().filter(d => d >= h.start).length; }
 function weekStart(s){ return addDays(s, -parseISO(s).getDay()); }
 /** 最初の達成日。記録が1件もなければ null */
 function firstDate(){
-  return doneDates().reduce((min,d)=> !min || d < min ? d : min, null);
+  // MIN_DATE より前の記録（年の打ち間違い）は数えない
+  return doneDates().filter(d => d >= MIN_DATE).reduce((min,d)=> !min || d < min ? d : min, null);
 }
 /** 登録した日のうちにアーカイブしたタスク（打ち間違いの取り消し） */
 function isTypo(task){ return task.archived && task.archivedAt <= task.createdAt; }
@@ -797,8 +798,7 @@ let gridMonth = null;
 
 /** さかのぼれる最も古い月。使い始めた月か、記録のある最も古い月の早いほう */
 function earliestMonth(h){
-  // MIN_DATE より前の記録（年の打ち間違い）までは、さかのぼらせない
-  const first = h.first && h.first >= MIN_DATE && h.first < h.start ? h.first : h.start;
+  const first = h.first && h.first < h.start ? h.first : h.start;
   return ym(first);
 }
 

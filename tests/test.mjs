@@ -756,6 +756,7 @@ console.log('\n― タスクの今週の回数 ―');
   ok('古すぎる日付の記録は数えない', a.html('hero').includes('class="bignum">2<') && stats(a).days === '2 日', a.html('hero').slice(0, 80));
   ok('古すぎる日付の記録は通算回数にも数えない', a.w.document.querySelector('#task-editor .tally').textContent === '通算 2 回', a.w.document.querySelector('#task-editor .tally').textContent);
   ok('古すぎる日付の記録の月まではさかのぼらない', a.w.document.getElementById('grid-prev').disabled);
+
   a.w.document.querySelector('.cell.today').click();
   a.w.document.querySelector('#sheet-body .toggle').click();
   ok('古すぎる日付の記録も保存し直したときに消えない', !!a.state().logs['1026-10-20'], JSON.stringify(Object.keys(a.state().logs)));
@@ -763,6 +764,14 @@ console.log('\n― タスクの今週の回数 ―');
   ok('選べない区切り時刻は既定の4時に戻る', a.w.document.getElementById('boundary').value === '4', a.w.document.getElementById('boundary').value);
   ok('選べないテーマはシステムに戻る', a.w.document.getElementById('theme').value === 'system' && !a.w.document.documentElement.hasAttribute('data-theme'),
      a.w.document.getElementById('theme').value);
+}
+{
+  // 古すぎる記録があっても、ほかの正しい記録の月まではさかのぼれる
+  const tasks = [{ id: 'x', name: 'X', order: 0, archived: true, createdAt: '2026-05-01', archivedAt: '2026-05-01' },
+    Object.assign({}, TASKS[0], { order: 1, createdAt: '2026-08-20' })];
+  const a = boot(base({ tasks, logs: Object.assign({ '1999-12-31': ['t1'], '2026-05-01': ['x'] }, span('2026-08-20', '2026-08-21')) }), '2026-08-21');
+  for (let i = 0; i < 3; i++) a.w.document.getElementById('grid-prev').click();
+  ok('正しい記録のある月まではさかのぼれる', a.text('grid-title') === '5月' && a.w.document.getElementById('grid-prev').disabled, a.text('grid-title'));
 }
 {
   // 並び順が欠けたタスクや文字列の archived があっても、追加・並べ替えが壊れない

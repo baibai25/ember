@@ -986,7 +986,7 @@ console.log('\n― 月めくり ―');
   const a = boot(base({ tasks, logs: Object.assign(span('2026-08-16', '2026-08-21'), { '2026-08-21': ['t1', 't9'] }) }), '2026-08-21');
   const msgs = []; a.w.confirm = m => { msgs.push(m); return true; };
   a.w.document.querySelectorAll('#task-editor .mini.danger')[1].click();
-  ok('今日の記録があれば「今日の間だけ残る」と伝える', msgs[0].includes('今日の間だけ残ります'), msgs[0]);
+  ok('今日の記録があれば「記録を取り消すまで残る」と伝える', msgs[0].includes('記録を取り消すまではホームに残ります'), msgs[0]);
   ok('実際に今日の間はホームに残る', [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(',') === 'スクワット10回,B（アーカイブ済み）',
      [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(','));
 }

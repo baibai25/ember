@@ -900,7 +900,7 @@ function renderSettings(h){
       const archivedNow = Object.assign({}, task, { archived: true, archivedAt: today() });
       const loggedToday = (state.logs[today()] || []).includes(task.id);
       const still = isRequired(archivedNow, h.from) ? '今週の判定にはまだ含まれるので、ホームには今週の間だけ残ります。'
-        : loggedToday ? '今日の記録があるので、ホームには今日の間だけ残ります。' : '';
+        : loggedToday ? '今日の記録があるので、記録を取り消すまではホームに残ります。' : '';
       if(confirm('「'+task.name+'」を一覧から外します。'+still+'過去の記録は残ります。')){
         task.archived = true; task.archivedAt = today(); save(); render();
       }

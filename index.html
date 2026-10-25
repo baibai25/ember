@@ -440,13 +440,13 @@ function normalize(s){
   });
   if(!BOUNDARY_HOURS.includes(out.settings.dayBoundaryHour)) out.settings.dayBoundaryHour = def.dayBoundaryHour;
   if(!THEMES.includes(out.settings.theme)) out.settings.theme = def.theme;
-  // tasks は id を持つものだけ。並び順は数値、アーカイブは真偽値にそろえる
-  out.tasks = !Array.isArray(out.tasks) ? [] : out.tasks
+  // tasks は id を持つものだけ。アーカイブは真偽値にそろえ、並び順は今の並びのまま
+  // 0 から振り直す（欠けや重複があると上下ボタンで並べ替えられないため）
+  out.tasks = (Array.isArray(out.tasks) ? out.tasks : [])
     .filter(task => task && typeof task.id === 'string')
-    .map((task, i) => Object.assign({}, task, {
-      order: Number.isFinite(task.order) ? task.order : i,
-      archived: task.archived === true
-    }));
+    .map((task, i) => ({ task, i, o: Number.isFinite(task.order) ? task.order : Infinity }))
+    .sort((a, b) => (a.o - b.o) || (a.i - b.i))
+    .map(({ task }, order) => Object.assign({}, task, { order, archived: task.archived === true }));
   // logs は「正しい日付 → 重複のない id の配列（空でない）」だけ。
   // どのタスクにも当てはまらない id も捨てない（tasks が壊れていると記録がすべて消えるため）。
   // そうした記録は過去日のシートに「削除されたタスク」として出し、画面から消せるようにする
@@ -525,13 +525,15 @@ function requiredTasks(from){
 
 /**
  * その日の一覧（ホームと過去日のシート）に出すタスク。
- * 未アーカイブのもの、その週の判定に入るもの、その日より後にアーカイブしたもの、その日に記録があるもの
+ * 未アーカイブのもの、その週の判定に入るもの、その日に記録があるもの、その日にまだあったもの
+ * （その日以降にアーカイブしたもの。登録した日にアーカイブした打ち間違いは除く）
  */
 function tasksForDay(date, h){
   const req = new Set(h.requiredIds[weekStart(date)] || []);
   const ids = state.logs[date] || [];
   return state.tasks
-    .filter(x => !x.archived || req.has(x.id) || (x.createdAt <= date && x.archivedAt > date) || ids.includes(x.id))
+    .filter(x => !x.archived || req.has(x.id) || ids.includes(x.id) ||
+      (x.createdAt <= date && x.archivedAt >= date && x.archivedAt > x.createdAt))
     .sort((a,b)=>a.order-b.order);
 }
 
@@ -550,7 +552,7 @@ function history(){
   const first = firstDate();
   // 記録がまだなければ今日が最初の記録日になる（今週の必須タスクを出すため）
   const start = first || t, cur = weekStart(t);
-  const h = { first, streak:0, best:0, shields:0, protected:0, weeks:{}, requiredIds:{}, gap:false, required:[], missing:[], counts:{} };
+  const h = { first, streak:0, best:0, shields:0, protected:0, weeks:{}, requiredIds:{}, gap:false, required:[], requiredSet:new Set(), missing:[], counts:{} };
   let run = 0;
   for(let w = weekStart(start); w <= cur; w = addDays(w,7)){
     const from = weekFrom(w, start);
@@ -566,7 +568,7 @@ function history(){
     const required = requiredTasks(from);
     const missing = required.filter(task => !counts[task.id]);
     h.requiredIds[w] = required.map(task => task.id);   // 過去日のシートが同じ判定を使えるように
-    if(w === cur){ Object.assign(h, { gap, required, missing, counts }); break; }   // 今週はまだ判定しない
+    if(w === cur){ Object.assign(h, { gap, required, requiredSet: new Set(required.map(x=>x.id)), missing, counts }); break; }   // 今週はまだ判定しない
 
     // 必須タスクが1つもない週は、空白日がなければ判定しない（+1も−1もしない）。
     // タスクを足す前の週を埋めてシールドを稼げないように、かつタスクを入れ替えた週を罰しないように
@@ -688,11 +690,11 @@ function renderHero(h){
 function renderTasks(h){
   const t = today(), ul = $('tasks');
   // 今週アーカイブしたタスクも、今週の判定にまだ入るものは週が終わるまで残す
-  const active = new Set(h.required.map(x=>x.id));
+  const active = h.requiredSet;
   const list = tasksForDay(t, h);
   $('hint').textContent = list.length ? '長押しで記録' : '';
   const counts = h.counts;   // 今週タスクごとに何日やったか
-  // 今週の判定に入るタスク（history() と同じ判定）
+  // 今週の判定に入るのに、まだ一度もやっていないタスク
   const due = new Set(h.missing.map(x=>x.id));
   ul.innerHTML = '';
 
@@ -818,7 +820,7 @@ function renderGrid(h){
 function renderSettings(h){
   const box = $('task-editor');
   const list = state.tasks.filter(x=>!x.archived).sort((a,b)=>a.order-b.order);
-  const active = new Set(h.required.map(x=>x.id));   // 今週の判定に入っているタスク
+  const active = h.requiredSet;   // 今週の判定に入っているタスク
   box.innerHTML = '';
 
   if(!list.length){
@@ -840,7 +842,8 @@ function renderSettings(h){
     b[0].onclick = ()=>{ if(i>0){ swap(list,i,i-1); save(); render(); } };
     b[1].onclick = ()=>{ if(i<list.length-1){ swap(list,i,i+1); save(); render(); } };
     b[2].onclick = ()=>{
-      const still = active.has(task.id) ? '今週の判定にはまだ含まれるので、ホームには今週の間だけ残ります。' : '';
+      // 登録した日のアーカイブは打ち間違いの取り消しとみなし、判定から外れる（requiredTasks と同じ）
+      const still = active.has(task.id) && task.createdAt < today() ? '今週の判定にはまだ含まれるので、ホームには今週の間だけ残ります。' : '';
       if(confirm('「'+task.name+'」を一覧から外します。'+still+'過去の記録は残ります。')){
         task.archived = true; task.archivedAt = today(); save(); render();
       }

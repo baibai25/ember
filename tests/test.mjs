@@ -540,7 +540,8 @@ console.log('\n― タスクの今週の回数 ―');
   ok('記録がなければ、今日アーカイブしたタスクだけホームに残る', home === '懸垂（今週まで）', home);
   [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '18').click();
   const sheet = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent).join(',');
-  ok('シートにも同じタスクが出る', sheet === '懸垂（アーカイブ済み）', sheet);
+  // 8/18 の時点ではどちらもまだあったので、その日のシートには両方出る（記録し忘れを直せる）
+  ok('その日にまだあったタスクはシートに出る', sheet === 'スクワット10回（アーカイブ済み）,懸垂（アーカイブ済み）', sheet);
 }
 {
   // 最初の記録日より前にアーカイブしたタスクは、最初の週の必須に入らない
@@ -574,6 +575,38 @@ console.log('\n― タスクの今週の回数 ―');
   const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
   ok('登録した日にアーカイブしたタスクは必須にしない', outlook(a) === '+1 枚 見込み', String(outlook(a)));
   ok('ホームにも残さない', a.w.document.querySelectorAll('.task').length === 1, String(a.w.document.querySelectorAll('.task').length));
+}
+{
+  // アーカイブ時の確認文：今日登録したタスクには「今週の間だけ残る」と言わない
+  // 日曜（8/23）に登録したタスクは今週の必須に入るが、今日アーカイブすれば打ち間違いの取り消し扱い
+  const tasks = [TASKS[0], { id: 't9', name: 'スクワト', order: 1, archived: false, createdAt: '2026-08-23' }];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-22') }), '2026-08-23');
+  const msgs = []; a.w.confirm = m => { msgs.push(m); return false; };
+  a.w.document.querySelectorAll('#task-editor .mini.danger')[1].click();
+  ok('今日登録したタスクには「今週の間だけ残る」と言わない', !msgs[0].includes('今週の間だけ残ります'), msgs[0]);
+}
+{
+  // アーカイブ済みタスクの今日の記録を誤って消しても、その日のうちは行が残り戻せる
+  const tasks = [TASKS[0], { id: 't9', name: '懸垂', order: 1, archived: true, createdAt: '2026-08-18', archivedAt: '2026-08-21' }];
+  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-16', '2026-08-21'), { '2026-08-21': ['t1', 't9'] }) }), '2026-08-21');
+  a.w.document.querySelector('.cell.today').click();
+  a.w.document.querySelectorAll('#sheet-body .toggle')[1].click();   // 懸垂の記録を消す
+  const labels = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent);
+  ok('記録を消してもその日のうちは行が残る', labels.join(',') === 'スクワット10回,懸垂（アーカイブ済み）', labels.join(','));
+}
+{
+  // 並び順が欠けたり重なったりしていても、0から振り直して並べ替えできる
+  const tasks = [
+    { id: 'a', name: 'A', order: 1, archived: false, createdAt: '2026-01-01' },
+    { id: 'b', name: 'B', archived: false, createdAt: '2026-01-01' },
+    { id: 'c', name: 'C', order: 1, archived: false, createdAt: '2026-01-01' }
+  ];
+  const a = boot(base({ tasks }), '2026-08-21');
+  const names = () => [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(',');
+  ok('並び順は今の並びのまま振り直す', names() === 'A,C,B', names());
+  a.w.document.getElementById('nav-settings').click();
+  a.w.document.querySelectorAll('#task-editor .row')[1].querySelectorAll('.mini')[0].click();   // C を上へ
+  ok('振り直した並び順で上下ボタンが効く', names() === 'C,A,B', names());
 }
 {
   // 週の途中で登録し、翌週にアーカイブしたタスクも、存在していた日のシートには出る（記録し忘れを直せる）

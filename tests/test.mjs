@@ -461,6 +461,50 @@ console.log('\n― タスクの今週の回数 ―');
   const logs = Object.assign(span('2026-08-16', '2026-08-21'), { '2026-08-18': {}, '2026-08-19': 'broken' });
   const a = boot(base({ logs }), '2026-08-21');
   ok('配列でない記録があっても描画できる', a.w.document.querySelectorAll('.cell').length > 0 && a.text('hero') !== '', a.text('hero').slice(0, 40));
+  // 文字列の記録は達成日に数えない（8/16〜8/21 のうち 8/18・8/19 が欠ける → 連続は4）
+  ok('配列でない記録は達成日に数えない', a.html('hero').includes('class="bignum">4<'), a.html('hero').slice(0, 80));
+  // その日をシートで押してもエラーにならず、記録できる
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '19').click();
+  a.w.document.querySelector('#sheet-body .toggle').click();
+  ok('配列でない記録の日もシートから記録できる', JSON.stringify(a.state().logs['2026-08-19']) === '["t1"]', JSON.stringify(a.state().logs['2026-08-19']));
+}
+{
+  // logs や tasks の形が壊れていても起動できる
+  const a = boot(base({ logs: null, tasks: 'broken' }), '2026-08-21');
+  ok('logs が null でも起動できる', a.html('hero').includes('>0</span> 日連続'), a.html('hero').slice(0, 80));
+}
+{
+  // 壊れたバックアップを復元しても、その後の起動が止まらない
+  const a = boot(base({ logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  a.w.confirm = () => true; a.w.alert = () => {};
+  a.w.restore(new a.w.File([JSON.stringify({ logs: null })], 'broken.json', { type: 'application/json' }));
+  await new Promise(r => setTimeout(r, 50));
+  ok('logs が null のバックアップを復元しても描画できる', a.html('hero').includes('>0</span> 日連続'), a.html('hero').slice(0, 80));
+  ok('保存されるデータの形もそろっている', JSON.stringify(a.state().logs) === '{}' && Array.isArray(a.state().tasks), JSON.stringify(a.state()));
+}
+{
+  // 今週登録して今週アーカイブしたタスクは今週の判定に入らないので、ホームにも残さない
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { createdAt: '2026-08-18', archived: true, archivedAt: '2026-08-19' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  ok('判定に入らないアーカイブ済みタスクはホームに残さない', a.w.document.querySelectorAll('.task').length === 1, String(a.w.document.querySelectorAll('.task').length));
+}
+{
+  // アーカイブ時の確認文：今週の判定に入っているタスクだけ「ホームに残る」と伝える
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { createdAt: '2026-08-18' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  const msgs = []; a.w.confirm = m => { msgs.push(m); return false; };
+  const del = a.w.document.querySelectorAll('#task-editor .mini.danger');
+  del[0].click(); del[1].click();
+  ok('今週の判定に入っているタスクは「今週の間だけ残る」と伝える', msgs[0].includes('今週の間だけ残ります'), msgs[0]);
+  ok('今週の判定に入らないタスクにはそう伝えない', !msgs[1].includes('今週の間だけ残ります'), msgs[1]);
+}
+{
+  // 記録がまだないとき、ホームとシートで「今週の判定に入るタスク」がそろう
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-17', archived: true, archivedAt: '2026-08-18' })];
+  const a = boot(base({ tasks }), '2026-08-19');
+  ok('記録がなくても、今週アーカイブした必須タスクはホームに残る', a.w.document.querySelectorAll('.task').length === 1);
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '18').click();
+  ok('同じタスクがシートにも出る', a.w.document.querySelectorAll('#sheet-body .toggle').length === 1, a.text('sheet-body'));
 }
 
 console.log('\n― 行の長押し ―');
@@ -586,6 +630,7 @@ console.log('\n― カレンダーの月表示 ―');
   ok('消費の週は −1', wk[1].textContent === '−1', wk[1].textContent);
   ok('リセットの週は ×', wk[2].textContent === '×' && wk[2].classList.contains('reset'), wk[2].textContent);
   ok('結果列に読み上げ用の説明がある', wk[1].getAttribute('aria-label') === 'シールドを1枚使って連続を維持した週', wk[1].getAttribute('aria-label'));
+  ok('結果列は画像として読み上げられる', wk[1].getAttribute('role') === 'img', String(wk[1].getAttribute('role')));
 }
 {
   // 月末に近い日でも表示は同じ1か月分（月めくりはしない）

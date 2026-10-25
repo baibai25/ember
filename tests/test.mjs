@@ -915,6 +915,18 @@ console.log('\n― 月めくり ―');
   ok('使い始めた月より前へは戻れない', a.text('grid-title') === '7月' && a.w.document.getElementById('grid-prev').disabled, a.text('grid-title'));
 }
 {
+  // id に " が入っていても、長押しで記録したあとの演出が壊れない
+  const tasks = [Object.assign({}, TASKS[0], { id: 't"1' })];
+  const a = boot(base({ tasks }), '2026-08-21');
+  const errors = []; a.w.addEventListener('error', e => errors.push(e.message));
+  const el = a.w.document.querySelector('.task');
+  el.dispatchEvent(new a.w.MouseEvent('pointerdown', { bubbles: true, clientX: 20, clientY: 20 }));
+  await new Promise(r => setTimeout(r, 650));
+  el.dispatchEvent(new a.w.MouseEvent('pointerup', { bubbles: true, clientX: 20, clientY: 20 }));
+  ok('id に " が入っていても記録でき、エラーにならない', JSON.stringify(a.state().logs['2026-08-21']) === '["t\\"1"]' && !errors.length,
+     JSON.stringify(a.state().logs) + ' ' + errors.join('/'));
+}
+{
   // 登録日の年が壊れていても、使い始めた日が大昔にならない
   const tasks = [Object.assign({}, TASKS[0], { createdAt: '1026-10-01' }), Object.assign({}, TWO[1], { createdAt: '2026-08-16' })];
   const t0 = Date.now();

@@ -557,7 +557,8 @@ function tasksForDay(date, h, withExisted){
 }
 
 /**
- * 連続日数・シールド・週の結果を、記録から最初の週まで遡って計算し直す（保存しない）。
+ * 連続日数・シールド・週の結果を、使い始めた週から記録をたどって計算し直す（保存しない）。
+ * 使い始めた日より前の記録は、判定にも連続日数にも数えない。
  * 週（日〜土）が終わるごとに判定する：毎日達成し、必須タスクを全部1回以上やった週は +1枚。
  * そうでない週は1枚使って連続を維持し、手持ちがなければ翌週の日曜から0日に戻る。
  * 週の途中の空白日は日数が増えないだけで、途切れはしない。
@@ -746,7 +747,8 @@ function renderTasks(h){
       const nowDone = (state.logs[t]||[]).includes(task.id);
       render();
       if(nowDone){
-        const fresh = ul.querySelector('.task[data-id="'+task.id+'"]');
+        // id にどんな文字が入っていても壊れないよう、セレクタは使わずに探す
+        const fresh = [...ul.children].find(li => li.dataset.id === task.id);
         if(fresh) fresh.classList.add('just');
         flash();
       }
@@ -760,7 +762,7 @@ function renderTasks(h){
 let gridMonth = null;
 
 /** さかのぼれる最も古い月。使い始めた月か、記録のある最も古い月の早いほう */
-function firstRecordMonth(h){
+function earliestMonth(h){
   const first = h.first && h.first < h.start ? h.first : h.start;
   return ym(first);
 }
@@ -776,8 +778,8 @@ function renderGrid(h){
   const t = today(), grid = $('grid');
   const weeks = h.weeks;
 
-  // 記録のある月より前と、来月以降には行けない
-  const cur = ym(t), min = firstRecordMonth(h);
+  // 使い始めた月（または記録のある最も古い月）より前と、来月以降には行けない
+  const cur = ym(t), min = earliestMonth(h);
   if(!gridMonth || gridMonth > cur) gridMonth = cur;
   if(gridMonth < min) gridMonth = min;
 

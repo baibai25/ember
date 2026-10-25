@@ -553,9 +553,42 @@ console.log('\n― タスクの今週の回数 ―');
   ok('最初の記録日より前にアーカイブしたタスクは必須でない', marks(a)[2] === 'earn', marks(a).join(','));
 }
 {
-  // どのタスクにも当てはまらない記録は捨てる（シートに出ず、画面から消せないため）
+  // どのタスクにも当てはまらない記録は捨てず、シートに「削除されたタスク」として出して消せるようにする
   const a = boot(base({ logs: Object.assign(span('2026-08-20', '2026-08-21'), { '2026-08-19': ['zz'] }) }), '2026-08-21');
-  ok('存在しないタスクの記録は達成日に数えない', a.html('hero').includes('class="bignum">2<'), a.html('hero').slice(0, 80));
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '19').click();
+  const labels = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent);
+  ok('存在しないタスクの記録はシートに「削除されたタスク」として出る', labels.join(',') === 'スクワット10回,（削除されたタスク）', labels.join(','));
+  a.w.document.querySelectorAll('#sheet-body .toggle')[1].click();
+  ok('シートから消せる', !a.state().logs['2026-08-19'], JSON.stringify(a.state().logs));
+}
+{
+  // タスク欄が壊れていても、記録は消さない
+  const a = boot(base({ tasks: { broken: true }, logs: span('2026-08-20', '2026-08-21') }), '2026-08-21');
+  a.w.document.querySelector('.cell.today').click();
+  a.w.document.querySelector('#sheet-body .toggle').click();   // 削除されたタスクとして出ている t1 を取り消す
+  ok('タスク欄が壊れていても記録は残る', JSON.stringify(Object.keys(a.state().logs)) === '["2026-08-20"]', JSON.stringify(a.state().logs));
+}
+{
+  // 日曜に登録してすぐアーカイブした（打ち間違いの取り消し）タスクは、その週の必須に入らない
+  const tasks = [TASKS[0], { id: 't9', name: 'スクワト', order: 1, archived: true, createdAt: '2026-08-16', archivedAt: '2026-08-16' }];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('登録した日にアーカイブしたタスクは必須にしない', outlook(a) === '+1 枚 見込み', String(outlook(a)));
+  ok('ホームにも残さない', a.w.document.querySelectorAll('.task').length === 1, String(a.w.document.querySelectorAll('.task').length));
+}
+{
+  // 週の途中で登録し、翌週にアーカイブしたタスクも、存在していた日のシートには出る（記録し忘れを直せる）
+  const tasks = [TASKS[0], { id: 't9', name: '懸垂', order: 1, archived: true, createdAt: '2026-08-12', archivedAt: '2026-08-18' }];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '13').click();
+  const labels = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent);
+  ok('存在していた日のシートにはアーカイブ済みタスクが出る', labels.join(',') === 'スクワット10回,懸垂（アーカイブ済み）', labels.join(','));
+}
+{
+  // 今日記録したタスクをアーカイブしても、今日の記録はホームから取り消せる
+  const tasks = [TASKS[0], { id: 't9', name: '懸垂', order: 1, archived: true, createdAt: '2026-08-18', archivedAt: '2026-08-21' }];
+  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-16', '2026-08-21'), { '2026-08-21': ['t1', 't9'] }) }), '2026-08-21');
+  const names = [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent);
+  ok('今日記録のあるアーカイブ済みタスクはホームに残る', names.join(',') === 'スクワット10回,懸垂（アーカイブ済み）', names.join(','));
 }
 {
   // 同じ日に同じタスクが重複して入っていても1回として数え、1回の操作で取り消せる

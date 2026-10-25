@@ -447,13 +447,13 @@ function normalize(s){
       order: Number.isFinite(task.order) ? task.order : i,
       archived: task.archived === true
     }));
-  // logs は「正しい日付 → 重複のない、実在するタスクの id の配列（空でない）」だけ。
-  // どのタスクにも当てはまらない id はシートに出ず、画面から消せないため捨てる
-  const known = new Set(out.tasks.map(task => task.id));
+  // logs は「正しい日付 → 重複のない id の配列（空でない）」だけ。
+  // どのタスクにも当てはまらない id も捨てない（tasks が壊れていると記録がすべて消えるため）。
+  // そうした記録は過去日のシートに「削除されたタスク」として出し、画面から消せるようにする
   const logs = {};
   if(out.logs && typeof out.logs === 'object'){
     for(const [d, ids] of Object.entries(out.logs)){
-      const list = Array.isArray(ids) ? [...new Set(ids.filter(id => known.has(id)))] : [];
+      const list = Array.isArray(ids) ? [...new Set(ids.filter(id => typeof id === 'string'))] : [];
       if(isDateKey(d) && d >= MIN_DATE && list.length) logs[d] = list;
     }
   }
@@ -515,10 +515,24 @@ function weekFrom(w, start){ return w < start ? start : w; }
  * その週に必須のタスク。from は判定開始日（通常は日曜、最初の週だけは最初の記録日）。
  * 判定開始日の時点で登録済みで、まだアーカイブされていなかったもの。
  * 判定開始日より後にアーカイブしても、その週はまだ必須で翌週から外れる
- * （週の途中でアーカイブして、やらなかったタスクを判定から逃がせないように）
+ * （週の途中でアーカイブして、やらなかったタスクを判定から逃がせないように）。
+ * 登録した日にアーカイブしたタスク（打ち間違いの取り消しなど）は一度も有効でなかったとみなす
  */
 function requiredTasks(from){
-  return state.tasks.filter(task => task.createdAt <= from && (!task.archived || task.archivedAt >= from));
+  return state.tasks.filter(task => task.createdAt <= from &&
+    (!task.archived || (task.archivedAt >= from && task.archivedAt > task.createdAt)));
+}
+
+/**
+ * その日の一覧（ホームと過去日のシート）に出すタスク。
+ * 未アーカイブのもの、その週の判定に入るもの、その日より後にアーカイブしたもの、その日に記録があるもの
+ */
+function tasksForDay(date, h){
+  const req = new Set(h.requiredIds[weekStart(date)] || []);
+  const ids = state.logs[date] || [];
+  return state.tasks
+    .filter(x => !x.archived || req.has(x.id) || (x.createdAt <= date && x.archivedAt > date) || ids.includes(x.id))
+    .sort((a,b)=>a.order-b.order);
 }
 
 /**
@@ -675,7 +689,7 @@ function renderTasks(h){
   const t = today(), ul = $('tasks');
   // 今週アーカイブしたタスクも、今週の判定にまだ入るものは週が終わるまで残す
   const active = new Set(h.required.map(x=>x.id));
-  const list = state.tasks.filter(x=>!x.archived || active.has(x.id)).sort((a,b)=>a.order-b.order);
+  const list = tasksForDay(t, h);
   $('hint').textContent = list.length ? '長押しで記録' : '';
   const counts = h.counts;   // 今週タスクごとに何日やったか
   // 今週の判定に入るタスク（history() と同じ判定）
@@ -703,7 +717,7 @@ function renderTasks(h){
         '<circle class="prog" cx="22" cy="22" r="18"></circle></svg>'+
         '<span class="core">✓</span>'+
       '</span>';
-    li.querySelector('.name').textContent = task.name + (task.archived ? '（今週まで）' : '');
+    li.querySelector('.name').textContent = task.name + (!task.archived ? '' : active.has(task.id) ? '（今週まで）' : '（アーカイブ済み）');
     // 今週の回数。週の判定に入るのにまだ0回のタスクだけ色を付ける
     const tally = li.querySelector('.tally');
     tally.textContent = '今週 ' + (counts[task.id] || 0) + ' 回';
@@ -917,21 +931,22 @@ function renderSheet(){
   const body = $('sheet-body');
   const h = history();
   const cur = state.logs[sheetDate] || [];
-  // アーカイブ済みでも、その週の必須だったタスクと、その日に記録のあるタスクは直せるように出す
   const w = weekStart(sheetDate);
-  // 週の判定と同じ必須タスク（最初の記録より前の週は判定していないので、なし）
-  const req = new Set(h.requiredIds[w] || []);
-  const list = state.tasks.filter(x=>!x.archived || req.has(x.id) || cur.includes(x.id)).sort((a,b)=>a.order-b.order);
+  // アーカイブ済みでも、その日に関わるタスクは直せるように出す。
+  // どのタスクにも当てはまらない記録（手で編集したデータ由来）も、消せるように出す
+  const known = new Set(state.tasks.map(x=>x.id));
+  const rows = tasksForDay(sheetDate, h).map(task => ({ id: task.id, label: task.name + (task.archived ? '（アーカイブ済み）' : '') }))
+    .concat(cur.filter(id => !known.has(id)).map(id => ({ id, label: '（削除されたタスク）' })));
   body.innerHTML = '';
 
-  if(!list.length){ body.innerHTML = '<p class="note">タスクがありません。</p>'; return; }
-  list.forEach(task=>{
-    const on = cur.includes(task.id);
+  if(!rows.length){ body.innerHTML = '<p class="note">タスクがありません。</p>'; return; }
+  rows.forEach(row=>{
+    const on = cur.includes(row.id);
     const el = document.createElement('div');
     el.className = 'toggle' + (on ? ' on' : '');
     el.innerHTML = '<span class="box">✓</span><span class="t"></span>';
-    el.querySelector('.t').textContent = task.name + (task.archived ? '（アーカイブ済み）' : '');
-    el.onclick = ()=>{ toggleTask(sheetDate, task.id); renderSheet(); render(); };
+    el.querySelector('.t').textContent = row.label;
+    el.onclick = ()=>{ toggleTask(sheetDate, row.id); renderSheet(); render(); };
     body.appendChild(el);
   });
 

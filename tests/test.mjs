@@ -553,6 +553,11 @@ console.log('\n― タスクの今週の回数 ―');
   ok('最初の記録日より前にアーカイブしたタスクは必須でない', marks(a)[2] === 'earn', marks(a).join(','));
 }
 {
+  // どのタスクにも当てはまらない記録は捨てる（シートに出ず、画面から消せないため）
+  const a = boot(base({ logs: Object.assign(span('2026-08-20', '2026-08-21'), { '2026-08-19': ['zz'] }) }), '2026-08-21');
+  ok('存在しないタスクの記録は達成日に数えない', a.html('hero').includes('class="bignum">2<'), a.html('hero').slice(0, 80));
+}
+{
   // 同じ日に同じタスクが重複して入っていても1回として数え、1回の操作で取り消せる
   const a = boot(base({ logs: { '2026-08-21': ['t1', 't1'] } }), '2026-08-21');
   ok('重複した記録は1回として数える', a.w.document.querySelector('.task .tally').textContent === '今週 1 回', a.w.document.querySelector('.task .tally').textContent);

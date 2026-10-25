@@ -447,11 +447,13 @@ function normalize(s){
       order: Number.isFinite(task.order) ? task.order : i,
       archived: task.archived === true
     }));
-  // logs は「正しい日付 → 重複のない id の配列（空でない）」だけ
+  // logs は「正しい日付 → 重複のない、実在するタスクの id の配列（空でない）」だけ。
+  // どのタスクにも当てはまらない id はシートに出ず、画面から消せないため捨てる
+  const known = new Set(out.tasks.map(task => task.id));
   const logs = {};
   if(out.logs && typeof out.logs === 'object'){
     for(const [d, ids] of Object.entries(out.logs)){
-      const list = Array.isArray(ids) ? [...new Set(ids.filter(id => typeof id === 'string'))] : [];
+      const list = Array.isArray(ids) ? [...new Set(ids.filter(id => known.has(id)))] : [];
       if(isDateKey(d) && d >= MIN_DATE && list.length) logs[d] = list;
     }
   }
@@ -534,7 +536,7 @@ function history(){
   const first = firstDate();
   // 記録がまだなければ今日が最初の記録日になる（今週の必須タスクを出すため）
   const start = first || t, cur = weekStart(t);
-  const h = { first, start, streak:0, best:0, shields:0, protected:0, weeks:{}, gap:false, required:[], missing:[], counts:{} };
+  const h = { first, streak:0, best:0, shields:0, protected:0, weeks:{}, requiredIds:{}, gap:false, required:[], missing:[], counts:{} };
   let run = 0;
   for(let w = weekStart(start); w <= cur; w = addDays(w,7)){
     const from = weekFrom(w, start);
@@ -549,6 +551,7 @@ function history(){
     }
     const required = requiredTasks(from);
     const missing = required.filter(task => !counts[task.id]);
+    h.requiredIds[w] = required.map(task => task.id);   // 過去日のシートが同じ判定を使えるように
     if(w === cur){ Object.assign(h, { gap, required, missing, counts }); break; }   // 今週はまだ判定しない
 
     // 必須タスクが1つもない週は、空白日がなければ判定しない（+1も−1もしない）。
@@ -916,8 +919,8 @@ function renderSheet(){
   const cur = state.logs[sheetDate] || [];
   // アーカイブ済みでも、その週の必須だったタスクと、その日に記録のあるタスクは直せるように出す
   const w = weekStart(sheetDate);
-  // 最初の記録より前に終わった週は判定していないので、必須タスクはない
-  const req = new Set(addDays(w, 6) < h.start ? [] : requiredTasks(weekFrom(w, h.start)).map(x=>x.id));
+  // 週の判定と同じ必須タスク（最初の記録より前の週は判定していないので、なし）
+  const req = new Set(h.requiredIds[w] || []);
   const list = state.tasks.filter(x=>!x.archived || req.has(x.id) || cur.includes(x.id)).sort((a,b)=>a.order-b.order);
   body.innerHTML = '';
 

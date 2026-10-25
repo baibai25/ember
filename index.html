@@ -469,10 +469,18 @@ function normalize(s){
   return out;
 }
 function load(){
+  let raw = null;
   try{
-    const raw = localStorage.getItem(KEY);
+    raw = localStorage.getItem(KEY);
     return raw ? normalize(JSON.parse(raw)) : blank();
-  }catch(e){ return blank(); }
+  }catch(e){
+    // 読めなかった元データは、次の保存で上書きされる前に退避する
+    if(raw){
+      try{ localStorage.setItem(KEY + '.broken', raw); }catch(_){}
+      setTimeout(()=> alert('保存データを読み込めなかったため、空の状態で起動しました。元のデータは端末内の「' + KEY + '.broken」に残しています。'), 0);
+    }
+    return blank();
+  }
 }
 /** 保存のたびに増える。computeHistory() の使い回しを捨てる目印 */
 let revision = 0;
@@ -510,7 +518,8 @@ function taskCounts(){
 function isDone(date){ return doneCount(date) > 0; }
 /** 達成した日。未来日のログ（復元データ由来）は数えない */
 function doneDates(){ const t = today(); return Object.keys(state.logs).filter(d => d <= t && isDone(d)); }
-function doneDays(){ return doneDates().length; }
+/** 達成日数。連続日数と同じく、使い始めた日より前の記録は数えない */
+function doneDays(h){ return doneDates().filter(d => d >= h.start).length; }
 /** その日を含む週の日曜。カレンダーと同じく日曜始まり */
 function weekStart(s){ return addDays(s, -parseISO(s).getDay()); }
 /** 最初の達成日。記録が1件もなければ null */
@@ -556,7 +565,9 @@ function tasksForDay(date, h, withExisted){
   const req = new Set(h.requiredIds[weekStart(date)] || []);
   const ids = state.logs[date] || [];
   return state.tasks
-    .filter(x => ids.includes(x.id) || (x.createdAt <= date && (!x.archived || req.has(x.id) ||
+    // 登録日より前に記録させないのはシートだけ。ホーム（今日）では、時計が戻って
+    // 登録日が今日より後になっても記録できるようにする
+    .filter(x => ids.includes(x.id) || ((!withExisted || x.createdAt <= date) && (!x.archived || req.has(x.id) ||
       (withExisted && x.archivedAt >= date && !isTypo(x)))))
     .sort((a,b)=>a.order-b.order);
 }
@@ -875,7 +886,9 @@ function renderSettings(h){
     b[2].onclick = ()=>{
       // 今日アーカイブしても今週の判定に残るか（判定開始日より後のアーカイブなら残る）
       const archivedNow = Object.assign({}, task, { archived: true, archivedAt: today() });
-      const still = isRequired(archivedNow, h.from) ? '今週の判定にはまだ含まれるので、ホームには今週の間だけ残ります。' : '';
+      const loggedToday = (state.logs[today()] || []).includes(task.id);
+      const still = isRequired(archivedNow, h.from) ? '今週の判定にはまだ含まれるので、ホームには今週の間だけ残ります。'
+        : loggedToday ? '今日の記録があるので、ホームには今日の間だけ残ります。' : '';
       if(confirm('「'+task.name+'」を一覧から外します。'+still+'過去の記録は残ります。')){
         task.archived = true; task.archivedAt = today(); save(); render();
       }
@@ -885,7 +898,7 @@ function renderSettings(h){
 
   $('theme').value = state.settings.theme || 'system';
   $('boundary').value = String(state.settings.dayBoundaryHour);
-  $('s-days').textContent = doneDays() + ' 日';
+  $('s-days').textContent = doneDays(h) + ' 日';
   $('s-sh').textContent   = h.shields + ' 枚';
   $('s-best').textContent = h.best + ' 日';
   $('s-used').textContent = h.protected + ' 週';

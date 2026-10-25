@@ -445,11 +445,15 @@ console.log('\n― データ保存 ―');
 }
 {
   // 壊れたデータからの復旧
+  const alerts = [];
   const dom = new JSDOM(HTML, {
     runScripts: 'dangerously', url: 'https://example.com/', pretendToBeVisual: true,
-    beforeParse(w) { w.localStorage.setItem('ember.v1', '{壊れたJSON'); }
+    beforeParse(w) { w.localStorage.setItem('ember.v1', '{壊れたJSON'); w.alert = m => alerts.push(m); }
   });
   ok('壊れた保存データでもクラッシュしない', !!dom.window.document.getElementById('hero').textContent);
+  ok('読めなかった元データは退避する', dom.window.localStorage.getItem('ember.v1.broken') === '{壊れたJSON');
+  await new Promise(r => setTimeout(r, 20));
+  ok('空の状態で起動したことを知らせる', alerts.length === 1 && alerts[0].includes('ember.v1.broken'), alerts.join('/'));
 }
 
 console.log('\n― 描画 ―');
@@ -928,6 +932,30 @@ console.log('\n― 月めくり ―');
   el.dispatchEvent(new a.w.MouseEvent('pointerup', { bubbles: true, clientX: 20, clientY: 20 }));
   ok('id に " が入っていても記録でき、エラーにならない', JSON.stringify(a.state().logs['2026-08-21']) === '["t\\"1"]' && !errors.length,
      JSON.stringify(a.state().logs) + ' ' + errors.join('/'));
+}
+{
+  // 時計が戻って登録日が今日より後になっても、ホームからは記録できる
+  const a = boot(base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-08-22' })] }), '2026-08-21');
+  ok('登録日が今日より後でもホームに出る', a.w.document.querySelectorAll('.task').length === 1, String(a.w.document.querySelectorAll('.task').length));
+}
+{
+  // 今日記録した、今週の判定に入らないタスクをアーカイブすると「今日の間だけ残る」と伝える
+  const tasks = [TASKS[0], { id: 't9', name: 'B', order: 1, archived: false, createdAt: '2026-08-19' }];
+  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-16', '2026-08-21'), { '2026-08-21': ['t1', 't9'] }) }), '2026-08-21');
+  const msgs = []; a.w.confirm = m => { msgs.push(m); return true; };
+  a.w.document.querySelectorAll('#task-editor .mini.danger')[1].click();
+  ok('今日の記録があれば「今日の間だけ残る」と伝える', msgs[0].includes('今日の間だけ残ります'), msgs[0]);
+  ok('実際に今日の間はホームに残る', [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(',') === 'スクワット10回,B（アーカイブ済み）',
+     [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(','));
+}
+{
+  // 達成日数も、使い始めた日より前の記録は数えない（連続日数とそろえる）
+  const tasks = [
+    { id: 'a', name: 'A', order: 0, archived: true, createdAt: '2026-08-17', archivedAt: '2026-08-17' },
+    Object.assign({}, TASKS[0], { order: 1, createdAt: '2026-08-19' })
+  ];
+  const a = boot(base({ tasks, logs: Object.assign({ '2026-08-17': ['a'] }, span('2026-08-19', '2026-08-21')) }), '2026-08-21');
+  ok('使い始めた日より前の記録は達成日数に数えない', stats(a).days === '3 日' && stats(a).best === '3 日', JSON.stringify(stats(a)));
 }
 {
   // 数値の id や、配列でない1件だけの記録でも、タスクと記録を失わない

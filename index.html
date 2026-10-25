@@ -404,6 +404,11 @@ nav button.on svg{stroke-width:1.9}
 /* ============ 定数 ============ */
 const KEY = 'ember.v1';
 const PRESS_MS = 500;
+/** 設定画面で選べる値。これ以外が入っていたら既定値に戻す */
+const BOUNDARY_HOURS = [0, 2, 3, 4, 5];
+const THEMES = ['system', 'light', 'dark'];
+/** これより前の日付の記録は捨てる（年の打ち間違いで何万週もたどらないように） */
+const MIN_DATE = '2000-01-01';
 const WD = ['日','月','火','水','木','金','土'];
 
 /* 連続日数 → 色。ライトは深く沈み、ダークは明るく燃える */
@@ -424,24 +429,30 @@ function blank(){
 }
 /**
  * 欠けている設定の既定値を補い、形をそろえる。読み込みと復元の両方で通す。
- * 手で編集したバックアップのような壊れた入力でも描画が止まらないよう、
- * 区切り時刻は0〜23の整数、tasks は id を持つものだけ、
- * logs は「正しい日付 → 空でない id の配列」だけにする
+ * 手で編集したバックアップのような壊れた入力でも、描画が止まったり固まったり、
+ * 画面から直せない状態になったりしないようにする
  */
 function normalize(s){
-  const b = blank();
+  const b = blank(), def = blank().settings;
   const out = Object.assign(b, s, {
     settings: Object.assign(b.settings, s.settings||{}),
     meta: Object.assign(b.meta, s.meta||{})
   });
-  const hour = out.settings.dayBoundaryHour;
-  if(!Number.isInteger(hour) || hour < 0 || hour > 23) out.settings.dayBoundaryHour = blank().settings.dayBoundaryHour;
-  out.tasks = Array.isArray(out.tasks) ? out.tasks.filter(task => task && typeof task.id === 'string') : [];
+  if(!BOUNDARY_HOURS.includes(out.settings.dayBoundaryHour)) out.settings.dayBoundaryHour = def.dayBoundaryHour;
+  if(!THEMES.includes(out.settings.theme)) out.settings.theme = def.theme;
+  // tasks は id を持つものだけ。並び順は数値、アーカイブは真偽値にそろえる
+  out.tasks = !Array.isArray(out.tasks) ? [] : out.tasks
+    .filter(task => task && typeof task.id === 'string')
+    .map((task, i) => Object.assign({}, task, {
+      order: Number.isFinite(task.order) ? task.order : i,
+      archived: task.archived === true
+    }));
+  // logs は「正しい日付 → 重複のない id の配列（空でない）」だけ
   const logs = {};
   if(out.logs && typeof out.logs === 'object'){
     for(const [d, ids] of Object.entries(out.logs)){
-      const list = Array.isArray(ids) ? ids.filter(id => typeof id === 'string') : [];
-      if(isDateKey(d) && list.length) logs[d] = list;
+      const list = Array.isArray(ids) ? [...new Set(ids.filter(id => typeof id === 'string'))] : [];
+      if(isDateKey(d) && d >= MIN_DATE && list.length) logs[d] = list;
     }
   }
   out.logs = logs;
@@ -500,11 +511,12 @@ function firstDate(){
 function weekFrom(w, start){ return w < start ? start : w; }
 /**
  * その週に必須のタスク。from は判定開始日（通常は日曜、最初の週だけは最初の記録日）。
- * 追加は判定開始日までに済んでいたものだけ。アーカイブはその週はまだ必須で、翌週から外す
+ * 判定開始日の時点で登録済みで、まだアーカイブされていなかったもの。
+ * 判定開始日より後にアーカイブしても、その週はまだ必須で翌週から外れる
  * （週の途中でアーカイブして、やらなかったタスクを判定から逃がせないように）
  */
-function requiredTasks(from, w){
-  return state.tasks.filter(task => task.createdAt <= from && (!task.archived || task.archivedAt >= w));
+function requiredTasks(from){
+  return state.tasks.filter(task => task.createdAt <= from && (!task.archived || task.archivedAt >= from));
 }
 
 /**
@@ -517,7 +529,7 @@ function requiredTasks(from, w){
 let memo = null;
 function history(){
   const t = today();
-  if(memo && memo.revision === revision && memo.t === t) return memo.h;
+  if(memo && memo.state === state && memo.revision === revision && memo.t === t) return memo.h;
 
   const first = firstDate();
   // 記録がまだなければ今日が最初の記録日になる（今週の必須タスクを出すため）
@@ -535,7 +547,7 @@ function history(){
       else if(d < t) gap = true;   // 今日はまだ終わっていない
       for(const id of ids) counts[id] = (counts[id] || 0) + 1;
     }
-    const required = requiredTasks(from, w);
+    const required = requiredTasks(from);
     const missing = required.filter(task => !counts[task.id]);
     if(w === cur){ Object.assign(h, { gap, required, missing, counts }); break; }   // 今週はまだ判定しない
 
@@ -547,7 +559,7 @@ function history(){
     else { run = 0; h.weeks[w] = 'reset'; }
   }
   h.streak = run;
-  memo = { revision, t, h };
+  memo = { state, revision, t, h };
   return h;
 }
 /** 今週の見込み。ホームの「今週」欄に出す */
@@ -904,7 +916,8 @@ function renderSheet(){
   const cur = state.logs[sheetDate] || [];
   // アーカイブ済みでも、その週の必須だったタスクと、その日に記録のあるタスクは直せるように出す
   const w = weekStart(sheetDate);
-  const req = new Set(requiredTasks(weekFrom(w, h.start), w).map(x=>x.id));
+  // 最初の記録より前に終わった週は判定していないので、必須タスクはない
+  const req = new Set(addDays(w, 6) < h.start ? [] : requiredTasks(weekFrom(w, h.start)).map(x=>x.id));
   const list = state.tasks.filter(x=>!x.archived || req.has(x.id) || cur.includes(x.id)).sort((a,b)=>a.order-b.order);
   body.innerHTML = '';
 

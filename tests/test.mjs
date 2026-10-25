@@ -530,11 +530,56 @@ console.log('\n― タスクの今週の回数 ―');
 }
 {
   // 記録がまだないとき、ホームとシートで「今週の判定に入るタスク」がそろう
-  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-17', archived: true, archivedAt: '2026-08-18' })];
+  // （記録がなければ今日が判定の起点。起点より前にアーカイブしたタスクは必須でない）
+  const tasks = [
+    Object.assign({}, TASKS[0], { createdAt: '2026-08-17', archived: true, archivedAt: '2026-08-18' }),
+    Object.assign({}, TWO[1], { createdAt: '2026-08-17', archived: true, archivedAt: '2026-08-19' })
+  ];
   const a = boot(base({ tasks }), '2026-08-19');
-  ok('記録がなくても、今週アーカイブした必須タスクはホームに残る', a.w.document.querySelectorAll('.task').length === 1);
+  const home = [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(',');
+  ok('記録がなければ、今日アーカイブしたタスクだけホームに残る', home === '懸垂（今週まで）', home);
   [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '18').click();
-  ok('同じタスクがシートにも出る', a.w.document.querySelectorAll('#sheet-body .toggle').length === 1, a.text('sheet-body'));
+  const sheet = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent).join(',');
+  ok('シートにも同じタスクが出る', sheet === '懸垂（アーカイブ済み）', sheet);
+}
+{
+  // 最初の記録日より前にアーカイブしたタスクは、最初の週の必須に入らない
+  // （打ち間違えたタスクを月曜に消して、火曜から記録を始めた）
+  const tasks = [
+    Object.assign({}, TASKS[0], { createdAt: '2026-08-10' }),
+    { id: 't9', name: 'スクワト', order: 1, archived: true, createdAt: '2026-08-10', archivedAt: '2026-08-10' }
+  ];
+  const a = boot(base({ tasks, logs: span('2026-08-11', '2026-08-21') }), '2026-08-21');
+  ok('最初の記録日より前にアーカイブしたタスクは必須でない', marks(a)[2] === 'earn', marks(a).join(','));
+}
+{
+  // 同じ日に同じタスクが重複して入っていても1回として数え、1回の操作で取り消せる
+  const a = boot(base({ logs: { '2026-08-21': ['t1', 't1'] } }), '2026-08-21');
+  ok('重複した記録は1回として数える', a.w.document.querySelector('.task .tally').textContent === '今週 1 回', a.w.document.querySelector('.task .tally').textContent);
+  a.w.document.querySelector('.cell.today').click();
+  a.w.document.querySelector('#sheet-body .toggle').click();
+  ok('重複していても1回の操作で取り消せる', !a.state().logs['2026-08-21'], JSON.stringify(a.state().logs));
+}
+{
+  // 年を打ち間違えた古すぎる記録は捨てる。画面で選べない設定値も既定値に戻す
+  const seed = base({ logs: Object.assign(span('2026-08-20', '2026-08-21'), { '1026-10-20': ['t1'] }) });
+  seed.settings.dayBoundaryHour = 12; seed.settings.theme = 'sepia';
+  const a = boot(seed, '2026-08-21');
+  ok('古すぎる日付の記録は捨てる（その月までは遡れない）', a.html('hero').includes('class="bignum">2<') && a.w.document.getElementById('grid-prev').disabled, a.html('hero').slice(0, 80));
+  a.w.document.getElementById('nav-settings').click();
+  ok('選べない区切り時刻は既定の4時に戻る', a.w.document.getElementById('boundary').value === '4', a.w.document.getElementById('boundary').value);
+  ok('選べないテーマはシステムに戻る', a.w.document.getElementById('theme').value === 'system' && !a.w.document.documentElement.hasAttribute('data-theme'),
+     a.w.document.getElementById('theme').value);
+}
+{
+  // 並び順が欠けたタスクや文字列の archived があっても、追加・並べ替えが壊れない
+  const tasks = [{ id: 't1', name: 'スクワット', archived: 'false', createdAt: '2026-01-01' }, { id: 't2', name: '懸垂', order: 1, archived: false, createdAt: '2026-01-01' }];
+  const a = boot(base({ tasks }), '2026-08-21');
+  ok('文字列の archived はアーカイブ扱いにしない', a.w.document.querySelectorAll('.task').length === 2, String(a.w.document.querySelectorAll('.task').length));
+  a.w.document.getElementById('nav-settings').click();
+  a.w.document.getElementById('new-task').value = '読書';
+  a.w.document.getElementById('add-task').click();
+  ok('並び順が欠けていても新しいタスクの並び順は数値になる', a.state().tasks.every(t => Number.isFinite(t.order)), JSON.stringify(a.state().tasks.map(t => t.order)));
 }
 
 console.log('\n― 行の長押し ―');

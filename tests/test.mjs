@@ -96,8 +96,10 @@ console.log('\n― 連続日数の計算 ―');
   ok('週の途中の空白日では途切れない（5を保持）', a.html('hero').includes('>5</span> 日連続'), a.html('hero'));
 }
 {
-  // 最初の週（8/10〜）は土曜(8/15)が空白でシールドもない → 週末でリセットし、8/16(日)から数え直す
-  const a = boot(base({ logs: Object.assign(span('2026-08-10', '2026-08-14'), span('2026-08-16', '2026-08-21')) }), '2026-08-21');
+  // 8/10(月)に使い始めた最初の週は土曜(8/15)が空白でシールドもない → 週末でリセットし、8/16(日)から数え直す
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-10' })];
+  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-10', '2026-08-14'), span('2026-08-16', '2026-08-21')) }), '2026-08-21');
+  ok('前提：最初の週は使い始めた日から判定され、リセット', marks(a)[2] === 'reset', marks(a).join(','));
   ok('未達の週がシールドなしで終わると、翌日曜から数え直す', a.html('hero').includes('class="bignum">6<'), a.html('hero').slice(0, 80));
 }
 {
@@ -204,10 +206,13 @@ console.log('\n― 週に必須のタスク ―');
   ok('日曜に追加したタスクはその週から必須', marks(a)[2] === 'reset', marks(a).join(','));
 }
 {
-  // 最初の週は、最初の記録日までに登録していたタスクが必須
-  const tasks = [TWO[0], Object.assign({}, TWO[1], { createdAt: '2026-08-12' })];
+  // 最初の週は、使い始めた日（8/12 水）に登録したタスクが必須。懸垂をやらなければリセット
+  const tasks = [Object.assign({}, TWO[0], { createdAt: '2026-08-12' }), Object.assign({}, TWO[1], { createdAt: '2026-08-12' })];
   const a = boot(base({ tasks, logs: span('2026-08-12', '2026-08-21') }), '2026-08-21');
-  ok('最初の記録日に登録したタスクは最初の週から必須', marks(a)[2] === 'reset', marks(a).join(','));
+  ok('使い始めた日に登録したタスクは最初の週から必須', marks(a)[2] === 'reset', marks(a).join(','));
+  // 懸垂がなければ同じ記録で +1 になる（このテストが懸垂の有無で結果を分けていることの確認）
+  const b = boot(base({ tasks: [tasks[0]], logs: span('2026-08-12', '2026-08-21') }), '2026-08-21');
+  ok('前提：懸垂がなければ最初の週は +1', marks(b)[2] === 'earn', marks(b).join(','));
 }
 {
   // その週のうちにアーカイブしても、その週はまだ必須（やらなかったタスクを判定から逃がせない）
@@ -1005,6 +1010,16 @@ console.log('\n― 月めくり ―');
   const saved = a.state();
   const b2 = boot(Object.assign(saved, { logs: span('2026-08-16', '2026-08-28') }), '2026-08-28');
   ok('翌週にはそのタスクは必須でない', outlook(b2) === '+1 枚 見込み' && b2.w.document.querySelectorAll('.task').length === 1, String(outlook(b2)));
+}
+{
+  // タスクが1つもない日のシートでも、週の結果は出す
+  const tasks = [
+    Object.assign({}, TASKS[0], { createdAt: '2026-07-01', archived: true, archivedAt: '2026-07-08' }),
+    Object.assign({}, TWO[1], { createdAt: '2026-07-21' })
+  ];
+  const a = boot(base({ tasks, logs: span('2026-07-01', '2026-07-08') }), '2026-07-25');
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '16').click();
+  ok('タスクがない日のシートにも週の結果を出す', a.text('sheet-body').includes('タスクがありません。') && a.text('sheet-body').includes('この週は連続がリセットされました。'), a.text('sheet-body'));
 }
 {
   // 使い始めた日より前の日のシートには、その週の結果を出さない（判定していないため）

@@ -998,7 +998,8 @@ function renderSheet(){
     .concat(cur.filter(id => !known.has(id)).map(id => ({ id, label: '（削除されたタスク）' })));
   body.innerHTML = '';
 
-  if(!rows.length){ body.innerHTML = '<p class="note">タスクがありません。</p>'; return; }
+  // タスクがない日でも、下の週の結果は出す
+  if(!rows.length) body.innerHTML = '<p class="note">タスクがありません。</p>';
   rows.forEach(row=>{
     const on = cur.includes(row.id);
     const el = document.createElement('div');

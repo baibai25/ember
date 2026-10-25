@@ -586,6 +586,16 @@ console.log('\n― タスクの今週の回数 ―');
   ok('今日登録したタスクには「今週の間だけ残る」と言わない', !msgs[0].includes('今週の間だけ残ります'), msgs[0]);
 }
 {
+  // 今週の判定に入らないタスクをアーカイブすると、すぐホームから消える（確認文どおり）
+  const tasks = [TASKS[0], { id: 't9', name: 'B', order: 1, archived: false, createdAt: '2026-08-18' }];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-20') }), '2026-08-20');
+  const msgs = []; a.w.confirm = m => { msgs.push(m); return true; };
+  a.w.document.querySelectorAll('#task-editor .mini.danger')[1].click();
+  ok('判定に入らないタスクは確認文で「残る」と言わない', !msgs[0].includes('今週の間だけ残ります'), msgs[0]);
+  ok('アーカイブするとすぐホームから消える', [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(',') === 'スクワット10回',
+     [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(','));
+}
+{
   // アーカイブ済みタスクの今日の記録を誤って消しても、その日のうちは行が残り戻せる
   const tasks = [TASKS[0], { id: 't9', name: '懸垂', order: 1, archived: true, createdAt: '2026-08-18', archivedAt: '2026-08-21' }];
   const a = boot(base({ tasks, logs: Object.assign(span('2026-08-16', '2026-08-21'), { '2026-08-21': ['t1', 't9'] }) }), '2026-08-21');

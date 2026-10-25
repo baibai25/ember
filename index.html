@@ -524,16 +524,17 @@ function requiredTasks(from){
 }
 
 /**
- * その日の一覧（ホームと過去日のシート）に出すタスク。
- * 未アーカイブのもの、その週の判定に入るもの、その日に記録があるもの、その日にまだあったもの
- * （その日以降にアーカイブしたもの。登録した日にアーカイブした打ち間違いは除く）
+ * その日の一覧に出すタスク。未アーカイブのもの、その週の判定に入るもの、その日に記録があるもの。
+ * 過去日のシート（withExisted）では、その日にまだあったもの（その日以降にアーカイブ。
+ * 登録した日にアーカイブした打ち間違いは除く）も出し、記録し忘れや誤って消した記録を直せるようにする。
+ * ホームには出さない（アーカイブした直後に一覧から消えるように）
  */
-function tasksForDay(date, h){
+function tasksForDay(date, h, withExisted){
   const req = new Set(h.requiredIds[weekStart(date)] || []);
   const ids = state.logs[date] || [];
   return state.tasks
     .filter(x => !x.archived || req.has(x.id) || ids.includes(x.id) ||
-      (x.createdAt <= date && x.archivedAt >= date && x.archivedAt > x.createdAt))
+      (withExisted && x.createdAt <= date && x.archivedAt >= date && x.archivedAt > x.createdAt))
     .sort((a,b)=>a.order-b.order);
 }
 
@@ -938,7 +939,7 @@ function renderSheet(){
   // アーカイブ済みでも、その日に関わるタスクは直せるように出す。
   // どのタスクにも当てはまらない記録（手で編集したデータ由来）も、消せるように出す
   const known = new Set(state.tasks.map(x=>x.id));
-  const rows = tasksForDay(sheetDate, h).map(task => ({ id: task.id, label: task.name + (task.archived ? '（アーカイブ済み）' : '') }))
+  const rows = tasksForDay(sheetDate, h, true).map(task => ({ id: task.id, label: task.name + (task.archived ? '（アーカイブ済み）' : '') }))
     .concat(cur.filter(id => !known.has(id)).map(id => ({ id, label: '（削除されたタスク）' })));
   body.innerHTML = '';
 

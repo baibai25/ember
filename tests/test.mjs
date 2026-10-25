@@ -185,10 +185,27 @@ console.log('\n― 週に必須のタスク ―');
   ok('最初の記録日に登録したタスクは最初の週から必須', marks(a)[2] === 'reset', marks(a).join(','));
 }
 {
-  // その週のうちにアーカイブしたタスクは外れる
+  // その週のうちにアーカイブしても、その週はまだ必須（やらなかったタスクを判定から逃がせない）
   const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-13' })];
   const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
-  ok('アーカイブした週から必須でなくなる', marks(a)[2] === 'earn', marks(a).join(','));
+  ok('アーカイブした週はまだ必須', marks(a)[2] === 'reset', marks(a).join(','));
+  ok('翌週からは必須でなくなる', outlook(a) === '+1 枚 見込み', String(outlook(a)));
+}
+{
+  // 抜け道：土曜にアーカイブし、翌日に同じタスクを登録し直しても、その週は救われない
+  const tasks = [
+    TWO[0],
+    Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-15' }),
+    { id: 't3', name: '懸垂', order: 2, archived: false, createdAt: '2026-08-16' }
+  ];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('土曜にアーカイブして登録し直しても、その週は未達', marks(a)[2] === 'reset', marks(a).join(','));
+}
+{
+  // 前の週までにアーカイブしたタスクは、その週の判定に入らない
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-08' })];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('前の週までにアーカイブしたタスクは必須でない', marks(a)[2] === 'earn', marks(a).join(','));
 }
 {
   // 終わった週の判定は、あとでアーカイブしても変わらない
@@ -419,12 +436,31 @@ console.log('\n― タスクの今週の回数 ―');
   ok('今週から追加したタスクは0回でも色を付けない', t.textContent === '今週 0 回' && !t.classList.contains('due'), t.className);
 }
 {
-  // アーカイブされたタスクの記録は残るが、行そのものが出ない
+  // 前の週までにアーカイブしたタスクは、記録は残るが行そのものが出ない
   const a = boot(base({
-    tasks: [{ id: 't1', name: 'スクワット', order: 0, archived: true, createdAt: '2026-01-01', archivedAt: '2026-08-21' }],
-    logs: { '2026-08-21': ['t1'] }
+    tasks: [{ id: 't1', name: 'スクワット', order: 0, archived: true, createdAt: '2026-01-01', archivedAt: '2026-08-15' }],
+    logs: { '2026-08-14': ['t1'] }
   }), '2026-08-21');
-  ok('アーカイブ済みのタスクは行ごと出ない', a.w.document.querySelectorAll('.task .tally').length === 0);
+  ok('前の週までにアーカイブしたタスクは行ごと出ない', a.w.document.querySelectorAll('.task .tally').length === 0);
+  ok('行がなければ長押しの案内も出ない', a.text('hint') === '', a.text('hint'));
+}
+{
+  // 今週アーカイブしたタスクは今週の判定にまだ入るので、週が終わるまでホームに残す
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-19' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  const rows = [...a.w.document.querySelectorAll('.task')];
+  ok('今週アーカイブしたタスクは「今週まで」付きでホームに残る', rows.length === 2 && rows[1].querySelector('.name').textContent === '懸垂（今週まで）',
+     rows.map(r => r.querySelector('.name').textContent).join(','));
+  ok('今週まだやっていなければ色が付く', rows[1].querySelector('.tally').classList.contains('due'));
+  ok('今週の見込みにも数えられる', outlook(a) === 'あと 1 タスク', String(outlook(a)));
+  const b = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-23');
+  ok('週が明けるとホームから消える', b.w.document.querySelectorAll('.task').length === 1, String(b.w.document.querySelectorAll('.task').length));
+}
+{
+  // 壊れた記録（配列でない）が混ざっていても描画が止まらない
+  const logs = Object.assign(span('2026-08-16', '2026-08-21'), { '2026-08-18': {}, '2026-08-19': 'broken' });
+  const a = boot(base({ logs }), '2026-08-21');
+  ok('配列でない記録があっても描画できる', a.w.document.querySelectorAll('.cell').length > 0 && a.text('hero') !== '', a.text('hero').slice(0, 40));
 }
 
 console.log('\n― 行の長押し ―');

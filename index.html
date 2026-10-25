@@ -482,17 +482,21 @@ function weekFrom(w, first){ return first && w < first ? first : w; }
 /** from〜to（両端含む）にタスクごとに何日やったか */
 function countRange(from, to){
   const c = Object.create(null);
-  for(let d = from; d <= to; d = addDays(d,1)) for(const id of state.logs[d] || []) c[id] = (c[id] || 0) + 1;
+  for(let d = from; d <= to; d = addDays(d,1)){
+    const ids = state.logs[d];
+    if(!Array.isArray(ids)) continue;   // 壊れた記録（復元データ由来）は読み飛ばす
+    for(const id of ids) c[id] = (c[id] || 0) + 1;
+  }
   return c;
 }
 
 /**
  * その週に必須のタスク。from は判定開始日（通常は日曜、最初の週だけは最初の記録日）。
- * 追加は判定開始日までに済んでいたものだけ、アーカイブはその週から外す
+ * 追加は判定開始日までに済んでいたものだけ。アーカイブはその週はまだ必須で、翌週から外す
+ * （週の途中でアーカイブして、やらなかったタスクを判定から逃がせないように）
  */
 function requiredTasks(from, w){
-  const end = addDays(w, 6);
-  return state.tasks.filter(task => task.createdAt <= from && (!task.archived || task.archivedAt > end));
+  return state.tasks.filter(task => task.createdAt <= from && (!task.archived || task.archivedAt >= w));
 }
 /** from〜to（両端含む）に一度もやっていない必須タスク */
 function missingTasks(from, to, w){
@@ -618,7 +622,6 @@ function render(){
 
 function renderHero(h){
   const t = today(), s = h.streak, done = isDone(t), el = $('hero');
-  $('hint').textContent = state.tasks.filter(x=>!x.archived).length ? '長押しで記録' : '';
 
   if(done){
     // 達成した日だけ大きく出す
@@ -645,8 +648,10 @@ function renderHero(h){
 }
 
 function renderTasks(h){
-  const t = today(), ul = $('tasks');
-  const list = state.tasks.filter(x=>!x.archived).sort((a,b)=>a.order-b.order);
+  const t = today(), ul = $('tasks'), w = weekStart(t);
+  // 今週アーカイブしたタスクは今週の判定にまだ入るので、週が終わるまで残す
+  const list = state.tasks.filter(x=>!x.archived || x.archivedAt >= w).sort((a,b)=>a.order-b.order);
+  $('hint').textContent = list.length ? '長押しで記録' : '';
   const counts = weekCounts();
   // 今週の判定に入るタスク（history() と同じ判定）
   const due = new Set(h.missing.map(x=>x.id));
@@ -673,12 +678,11 @@ function renderTasks(h){
         '<circle class="prog" cx="22" cy="22" r="18"></circle></svg>'+
         '<span class="core">✓</span>'+
       '</span>';
-    li.querySelector('.name').textContent = task.name;
+    li.querySelector('.name').textContent = task.name + (task.archived ? '（今週まで）' : '');
     // 今週の回数。週の判定に入るのにまだ0回のタスクだけ色を付ける
-    const n = counts[task.id] || 0;
     const tally = li.querySelector('.tally');
-    tally.textContent = '今週 ' + n + ' 回';
-    if(!n && due.has(task.id)) tally.classList.add('due');
+    tally.textContent = '今週 ' + (counts[task.id] || 0) + ' 回';
+    if(due.has(task.id)) tally.classList.add('due');
     attachPress(li, ()=>{
       toggleTask(t, task.id);
       const nowDone = (state.logs[t]||[]).includes(task.id);
@@ -795,7 +799,7 @@ function renderSettings(h){
     b[0].onclick = ()=>{ if(i>0){ swap(list,i,i-1); save(); render(); } };
     b[1].onclick = ()=>{ if(i<list.length-1){ swap(list,i,i+1); save(); render(); } };
     b[2].onclick = ()=>{
-      if(confirm('「'+task.name+'」を一覧から外します。過去の記録は残ります。')){
+      if(confirm('「'+task.name+'」を一覧から外します。今週の判定にはまだ含まれ、ホームには今週の間だけ残ります。過去の記録は残ります。')){
         task.archived = true; task.archivedAt = today(); save(); render();
       }
     };

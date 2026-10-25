@@ -451,18 +451,22 @@ console.log('\n― データ保存 ―');
     beforeParse(w) { w.localStorage.setItem('ember.v1', '{壊れたJSON'); w.alert = m => alerts.push(m); }
   });
   ok('壊れた保存データでもクラッシュしない', !!dom.window.document.getElementById('hero').textContent);
-  ok('読めなかった元データは退避する', dom.window.localStorage.getItem('ember.v1.broken') === '{壊れたJSON');
+  const ls = dom.window.localStorage;
+  const brokenKeys = [...Array(ls.length).keys()].map(i => ls.key(i)).filter(k => k.startsWith('ember.v1.broken.'));
+  ok('読めなかった元データは退避する', brokenKeys.length === 1 && ls.getItem(brokenKeys[0]) === '{壊れたJSON', brokenKeys.join(','));
   await new Promise(r => setTimeout(r, 20));
-  ok('空の状態で起動したことを知らせる', alerts.length === 1 && alerts[0].includes('ember.v1.broken'), alerts.join('/'));
+  ok('空の状態で起動したことを知らせ、退避先を伝える', alerts.length === 1 && alerts[0].includes(brokenKeys[0]), alerts.join('/'));
 }
 {
-  // 2回目に読めなくなっても、最初に退避したデータは上書きしない
+  // 2回目に読めなくなっても、前に退避したデータも今回のデータも残す
   const alerts = [];
   const dom = new JSDOM(HTML, {
     runScripts: 'dangerously', url: 'https://example.com/', pretendToBeVisual: true,
-    beforeParse(w) { w.localStorage.setItem('ember.v1.broken', '最初のデータ'); w.localStorage.setItem('ember.v1', '{2回目'); w.alert = m => alerts.push(m); }
+    beforeParse(w) { w.localStorage.setItem('ember.v1.broken.1', '最初のデータ'); w.localStorage.setItem('ember.v1', '{2回目'); w.alert = m => alerts.push(m); }
   });
-  ok('先に退避したデータは上書きしない', dom.window.localStorage.getItem('ember.v1.broken') === '最初のデータ');
+  const ls = dom.window.localStorage;
+  const values = [...Array(ls.length).keys()].map(i => ls.key(i)).filter(k => k.startsWith('ember.v1.broken.')).map(k => ls.getItem(k)).sort();
+  ok('前に退避したデータも今回のデータも残す', values.join(',') === '{2回目,最初のデータ', values.join(','));
 }
 {
   // 退避できなかったときは、残せたとは言わない
@@ -472,7 +476,7 @@ console.log('\n― データ保存 ―');
     beforeParse(w) {
       w.localStorage.setItem('ember.v1', '{壊れたJSON');
       const orig = w.Storage.prototype.setItem;
-      w.Storage.prototype.setItem = function(k, v){ if(k === 'ember.v1.broken') throw new Error('QuotaExceeded'); return orig.call(this, k, v); };
+      w.Storage.prototype.setItem = function(k, v){ if(k.startsWith('ember.v1.broken')) throw new Error('QuotaExceeded'); return orig.call(this, k, v); };
       w.alert = m => alerts.push(m);
     }
   });
@@ -974,6 +978,18 @@ console.log('\n― 月めくり ―');
   ok('今日の記録があれば「今日の間だけ残る」と伝える', msgs[0].includes('今日の間だけ残ります'), msgs[0]);
   ok('実際に今日の間はホームに残る', [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(',') === 'スクワット10回,B（アーカイブ済み）',
      [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(','));
+}
+{
+  // 未来のアーカイブ日は今日にそろえる（毎週必須のまま外せなくなるのを防ぐ）
+  const tasks = [TASKS[0], Object.assign({}, TWO[1], { createdAt: '2026-08-01', archived: true, archivedAt: '2099-01-01' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  ok('未来のアーカイブ日は今日にそろえる', a.w.eval('state').tasks.find(x => x.id === 't2').archivedAt === '2026-08-21');
+  a.w.document.querySelector('.cell.today').click();
+  a.w.document.querySelector('#sheet-body .toggle').click();   // 保存させる（今日の記録を一度消して戻す）
+  a.w.document.querySelector('#sheet-body .toggle').click();
+  const saved = a.state();
+  const b2 = boot(Object.assign(saved, { logs: span('2026-08-16', '2026-08-28') }), '2026-08-28');
+  ok('翌週にはそのタスクは必須でない', outlook(b2) === '+1 枚 見込み' && b2.w.document.querySelectorAll('.task').length === 1, String(outlook(b2)));
 }
 {
   // 使い始めた日より前の日のシートには、その週の結果を出さない（判定していないため）

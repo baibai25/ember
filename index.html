@@ -440,6 +440,7 @@ function normalize(s){
   });
   if(!BOUNDARY_HOURS.includes(out.settings.dayBoundaryHour)) out.settings.dayBoundaryHour = def.dayBoundaryHour;
   if(!THEMES.includes(out.settings.theme)) out.settings.theme = def.theme;
+  const now = iso(new Date(Date.now() - out.settings.dayBoundaryHour*3600000));   // 今日（state が無いので自前で求める）
   // id は文字列にそろえる（数値の id を捨てると、そのタスクと記録がすべて消えるため）
   const toId = id => typeof id === 'string' ? id : typeof id === 'number' ? String(id) : null;
   // tasks は id を持つものだけ。アーカイブは真偽値にそろえ、並び順は今の並びのまま
@@ -452,6 +453,8 @@ function normalize(s){
       const clean = Object.assign({}, task, { id: toId(task.id), order, archived: task.archived === true });
       // 正しくない日付は持たない（年の打ち間違いで使い始めた日が大昔になり、何万週もたどらないように）
       for(const k of ['createdAt', 'archivedAt']) if(!isDateKey(clean[k]) || clean[k] < MIN_DATE) delete clean[k];
+      // 未来のアーカイブ日は今日にそろえる（毎週必須のまま残り、画面から外せなくなるため）
+      if(clean.archivedAt > now) clean.archivedAt = now;
       return clean;
     });
   // logs は「正しい日付 → 重複のない id の配列（空でない）」だけ。
@@ -475,11 +478,11 @@ function load(){
     return raw ? normalize(JSON.parse(raw)) : blank();
   }catch(e){
     // 読めなかった元データは、次の保存で上書きされる前に退避する
-    // 先に退避したものがあれば上書きしない（最初に読めなくなったデータを残す）
+    // 退避先は毎回別の名前にする（前に退避したデータも、今回のデータも上書きしない）
     if(raw){
-      const BROKEN = KEY + '.broken';
+      const BROKEN = KEY + '.broken.' + Date.now();
       let kept = false;
-      try{ if(localStorage.getItem(BROKEN) === null) localStorage.setItem(BROKEN, raw); kept = localStorage.getItem(BROKEN) !== null; }catch(_){}
+      try{ localStorage.setItem(BROKEN, raw); kept = localStorage.getItem(BROKEN) === raw; }catch(_){}
       const msg = '保存データを読み込めなかったため、空の状態で起動しました。' + (kept
         ? '元のデータは端末内の「' + BROKEN + '」に残しています。'
         : '元のデータを退避できませんでした。バックアップから復元してください。');

@@ -202,6 +202,26 @@ console.log('\n― 週に必須のタスク ―');
   ok('土曜にアーカイブして登録し直しても、その週は未達', marks(a)[2] === 'reset', marks(a).join(','));
 }
 {
+  // 判定開始日（日曜）にアーカイブしたタスクは、その週から外れる
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-09' })];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('日曜にアーカイブしたタスクはその週から必須でない', marks(a)[2] === 'earn', marks(a).join(','));
+}
+{
+  // 今週の日曜にアーカイブしたタスクはホームにも残らず、今週の見込みにも入らない
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-16' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  ok('今週の日曜にアーカイブしたタスクは今週の見込みに入らない', outlook(a) === '+1 枚 見込み', String(outlook(a)));
+  ok('ホームにも残らない', a.w.document.querySelectorAll('.task').length === 1, String(a.w.document.querySelectorAll('.task').length));
+}
+{
+  // 日曜にアーカイブするときは「今週の間だけ残る」と言わない
+  const a = boot(base({ tasks: TWO, logs: span('2026-08-16', '2026-08-22') }), '2026-08-23');
+  const msgs = []; a.w.confirm = m => { msgs.push(m); return false; };
+  a.w.document.querySelectorAll('#task-editor .mini.danger')[1].click();
+  ok('日曜のアーカイブでは「今週の間だけ残る」と言わない', !msgs[0].includes('今週の間だけ残ります'), msgs[0]);
+}
+{
   // 前の週までにアーカイブしたタスクは、その週の判定に入らない
   const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-08' })];
   const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
@@ -235,12 +255,21 @@ console.log('\n― 週に必須のタスク ―');
   ok('今週の必須タスクがなければ 判定なし', outlook(a) === '判定なし', String(outlook(a)));
 }
 {
-  // 登録後に過去の土曜を1日だけ埋める（レビューで再現した手順）
+  // 登録した日より前の日には、そのタスクを記録できない（さかのぼって埋めると最初の週の判定がずれるため）
   const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-19' })];
   const a = boot(base({ tasks, logs: span('2026-08-19', '2026-08-21') }), '2026-08-21');
   [...a.w.document.querySelectorAll('.cell')].find(c => day(c) === '15').click();
+  ok('登録前の日のシートにはタスクが出ない', a.text('sheet-body') === 'タスクがありません。', a.text('sheet-body'));
+  [...a.w.document.querySelectorAll('.cell')].find(c => day(c) === '19').click();
+  ok('登録した日のシートには出る', a.w.document.querySelectorAll('#sheet-body .toggle').length === 1, a.text('sheet-body'));
+}
+{
+  // 登録前の日にすでに記録がある場合（データ由来）は、消せるように出す
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-19' })];
+  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-19', '2026-08-21'), { '2026-08-15': ['t1'] }) }), '2026-08-21');
+  [...a.w.document.querySelectorAll('.cell')].find(c => day(c) === '15').click();
   a.w.document.querySelector('#sheet-body .toggle').click();
-  ok('登録前の日を埋めてもシールドは増えない', stats(a).sh === '0 枚', JSON.stringify(stats(a)));
+  ok('登録前の日の記録はシートから消せる', !a.state().logs['2026-08-15'], JSON.stringify(a.state().logs));
 }
 
 console.log('\n― アーカイブしたタスクの過去日 ―');
@@ -529,15 +558,14 @@ console.log('\n― タスクの今週の回数 ―');
   ok('今週の判定に入らないタスクにはそう伝えない', !msgs[1].includes('今週の間だけ残ります'), msgs[1]);
 }
 {
-  // 記録がまだないとき、ホームとシートで「今週の判定に入るタスク」がそろう
-  // （記録がなければ今日が判定の起点。起点より前にアーカイブしたタスクは必須でない）
+  // 記録がまだないときは今日が判定の起点。起点までにアーカイブしたタスクは必須でなく、ホームにも出ない
   const tasks = [
     Object.assign({}, TASKS[0], { createdAt: '2026-08-17', archived: true, archivedAt: '2026-08-18' }),
     Object.assign({}, TWO[1], { createdAt: '2026-08-17', archived: true, archivedAt: '2026-08-19' })
   ];
   const a = boot(base({ tasks }), '2026-08-19');
   const home = [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(',');
-  ok('記録がなければ、今日アーカイブしたタスクだけホームに残る', home === '懸垂（今週まで）', home);
+  ok('記録がなければ、今日までにアーカイブしたタスクはホームに出ない', home === '', home);
   [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '18').click();
   const sheet = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent).join(',');
   // 8/18 の時点ではどちらもまだあったので、その日のシートには両方出る（記録し忘れを直せる）

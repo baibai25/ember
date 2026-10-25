@@ -513,28 +513,28 @@ function firstDate(){
 function weekFrom(w, start){ return w < start ? start : w; }
 /**
  * その週に必須のタスク。from は判定開始日（通常は日曜、最初の週だけは最初の記録日）。
- * 判定開始日の時点で登録済みで、まだアーカイブされていなかったもの。
- * 判定開始日より後にアーカイブしても、その週はまだ必須で翌週から外れる
- * （週の途中でアーカイブして、やらなかったタスクを判定から逃がせないように）。
- * 登録した日にアーカイブしたタスク（打ち間違いの取り消しなど）は一度も有効でなかったとみなす
+ * 判定開始日までに登録していて、判定開始日のうちにはアーカイブしなかったもの。
+ * 週の途中でアーカイブしても、その週はまだ必須で翌週から外れる
+ * （やらなかったタスクを判定から逃がせないように）。判定開始日にアーカイブすれば、その週から外れる
  */
 function requiredTasks(from){
-  return state.tasks.filter(task => task.createdAt <= from &&
-    (!task.archived || (task.archivedAt >= from && task.archivedAt > task.createdAt)));
+  return state.tasks.filter(task => task.createdAt <= from && (!task.archived || task.archivedAt > from));
 }
 
 /**
- * その日の一覧に出すタスク。未アーカイブのもの、その週の判定に入るもの、その日に記録があるもの。
+ * その日の一覧に出すタスク。その日に記録があるものは、消せるように必ず出す。
+ * それ以外は、その日までに登録していたもののうち、未アーカイブのものと、その週の判定に入るもの。
  * 過去日のシート（withExisted）では、その日にまだあったもの（その日以降にアーカイブ。
  * 登録した日にアーカイブした打ち間違いは除く）も出し、記録し忘れや誤って消した記録を直せるようにする。
- * ホームには出さない（アーカイブした直後に一覧から消えるように）
+ * ホームには出さない（アーカイブした直後に一覧から消えるように）。
+ * 登録した日より前の日には記録させない（さかのぼって埋めると、最初の週の判定がずれるため）
  */
 function tasksForDay(date, h, withExisted){
   const req = new Set(h.requiredIds[weekStart(date)] || []);
   const ids = state.logs[date] || [];
   return state.tasks
-    .filter(x => !x.archived || req.has(x.id) || ids.includes(x.id) ||
-      (withExisted && x.createdAt <= date && x.archivedAt >= date && x.archivedAt > x.createdAt))
+    .filter(x => ids.includes(x.id) || (x.createdAt <= date && (!x.archived || req.has(x.id) ||
+      (withExisted && x.archivedAt >= date && x.archivedAt > x.createdAt))))
     .sort((a,b)=>a.order-b.order);
 }
 
@@ -569,7 +569,7 @@ function history(){
     const required = requiredTasks(from);
     const missing = required.filter(task => !counts[task.id]);
     h.requiredIds[w] = required.map(task => task.id);   // 過去日のシートが同じ判定を使えるように
-    if(w === cur){ Object.assign(h, { gap, required, requiredSet: new Set(required.map(x=>x.id)), missing, counts }); break; }   // 今週はまだ判定しない
+    if(w === cur){ Object.assign(h, { from, gap, required, requiredSet: new Set(required.map(x=>x.id)), missing, counts }); break; }   // 今週はまだ判定しない
 
     // 必須タスクが1つもない週は、空白日がなければ判定しない（+1も−1もしない）。
     // タスクを足す前の週を埋めてシールドを稼げないように、かつタスクを入れ替えた週を罰しないように
@@ -843,8 +843,8 @@ function renderSettings(h){
     b[0].onclick = ()=>{ if(i>0){ swap(list,i,i-1); save(); render(); } };
     b[1].onclick = ()=>{ if(i<list.length-1){ swap(list,i,i+1); save(); render(); } };
     b[2].onclick = ()=>{
-      // 登録した日のアーカイブは打ち間違いの取り消しとみなし、判定から外れる（requiredTasks と同じ）
-      const still = active.has(task.id) && task.createdAt < today() ? '今週の判定にはまだ含まれるので、ホームには今週の間だけ残ります。' : '';
+      // 判定開始日より後にアーカイブするときだけ、今週の判定に残る（requiredTasks と同じ）
+      const still = active.has(task.id) && today() > h.from ? '今週の判定にはまだ含まれるので、ホームには今週の間だけ残ります。' : '';
       if(confirm('「'+task.name+'」を一覧から外します。'+still+'過去の記録は残ります。')){
         task.archived = true; task.archivedAt = today(); save(); render();
       }

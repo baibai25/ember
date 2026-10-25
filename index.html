@@ -407,7 +407,7 @@ const PRESS_MS = 500;
 /** 設定画面で選べる値。これ以外が入っていたら既定値に戻す */
 const BOUNDARY_HOURS = [0, 2, 3, 4, 5];
 const THEMES = ['system', 'light', 'dark'];
-/** これより前の日付の記録は捨てる（年の打ち間違いで何万週もたどらないように） */
+/** 登録日・アーカイブ日がこれより前なら持たない（年の打ち間違いで使い始めた日が大昔になり、何万週もたどらないように） */
 const MIN_DATE = '2000-01-01';
 const WD = ['日','月','火','水','木','金','土'];
 
@@ -462,7 +462,7 @@ function normalize(s){
     for(const [d, ids] of Object.entries(out.logs)){
       // 1つだけの id が配列でなく書かれていても、配列として扱う
       const list = [...new Set((Array.isArray(ids) ? ids : [ids]).map(toId).filter(id => id !== null))];
-      if(isDateKey(d) && d >= MIN_DATE && list.length) logs[d] = list;
+      if(isDateKey(d) && list.length) logs[d] = list;
     }
   }
   out.logs = logs;
@@ -475,9 +475,15 @@ function load(){
     return raw ? normalize(JSON.parse(raw)) : blank();
   }catch(e){
     // 読めなかった元データは、次の保存で上書きされる前に退避する
+    // 先に退避したものがあれば上書きしない（最初に読めなくなったデータを残す）
     if(raw){
-      try{ localStorage.setItem(KEY + '.broken', raw); }catch(_){}
-      setTimeout(()=> alert('保存データを読み込めなかったため、空の状態で起動しました。元のデータは端末内の「' + KEY + '.broken」に残しています。'), 0);
+      const BROKEN = KEY + '.broken';
+      let kept = false;
+      try{ if(localStorage.getItem(BROKEN) === null) localStorage.setItem(BROKEN, raw); kept = localStorage.getItem(BROKEN) !== null; }catch(_){}
+      const msg = '保存データを読み込めなかったため、空の状態で起動しました。' + (kept
+        ? '元のデータは端末内の「' + BROKEN + '」に残しています。'
+        : '元のデータを退避できませんでした。バックアップから復元してください。');
+      setTimeout(()=> alert(msg), 0);
     }
     return blank();
   }
@@ -998,8 +1004,8 @@ function renderSheet(){
     body.appendChild(el);
   });
 
-  // その日を含む週の結果。記録を直せば週の結果も計算し直される
-  const r = h.weeks[w];
+  // その日を含む週の結果。記録を直せば週の結果も計算し直される（使い始めた日より前の日は判定外）
+  const r = sheetDate >= h.start ? h.weeks[w] : null;
   if(r){
     const p = document.createElement('p');
     p.className = 'note';

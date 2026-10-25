@@ -455,6 +455,30 @@ console.log('\n― データ保存 ―');
   await new Promise(r => setTimeout(r, 20));
   ok('空の状態で起動したことを知らせる', alerts.length === 1 && alerts[0].includes('ember.v1.broken'), alerts.join('/'));
 }
+{
+  // 2回目に読めなくなっても、最初に退避したデータは上書きしない
+  const alerts = [];
+  const dom = new JSDOM(HTML, {
+    runScripts: 'dangerously', url: 'https://example.com/', pretendToBeVisual: true,
+    beforeParse(w) { w.localStorage.setItem('ember.v1.broken', '最初のデータ'); w.localStorage.setItem('ember.v1', '{2回目'); w.alert = m => alerts.push(m); }
+  });
+  ok('先に退避したデータは上書きしない', dom.window.localStorage.getItem('ember.v1.broken') === '最初のデータ');
+}
+{
+  // 退避できなかったときは、残せたとは言わない
+  const alerts = [];
+  const dom = new JSDOM(HTML, {
+    runScripts: 'dangerously', url: 'https://example.com/', pretendToBeVisual: true,
+    beforeParse(w) {
+      w.localStorage.setItem('ember.v1', '{壊れたJSON');
+      const orig = w.Storage.prototype.setItem;
+      w.Storage.prototype.setItem = function(k, v){ if(k === 'ember.v1.broken') throw new Error('QuotaExceeded'); return orig.call(this, k, v); };
+      w.alert = m => alerts.push(m);
+    }
+  });
+  await new Promise(r => setTimeout(r, 20));
+  ok('退避できなかったときはバックアップからの復元を促す', alerts.length === 1 && alerts[0].includes('退避できませんでした'), alerts.join('/'));
+}
 
 console.log('\n― 描画 ―');
 {
@@ -721,11 +745,14 @@ console.log('\n― タスクの今週の回数 ―');
   ok('重複していても1回の操作で取り消せる', !a.state().logs['2026-08-21'], JSON.stringify(a.state().logs));
 }
 {
-  // 年を打ち間違えた古すぎる記録は捨てる。画面で選べない設定値も既定値に戻す
+  // 年を打ち間違えた古すぎる記録も捨てない（使い始めた日より前なので数えないだけ）。画面で選べない設定値は既定値に戻す
   const seed = base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-08-20' })], logs: Object.assign(span('2026-08-20', '2026-08-21'), { '1026-10-20': ['t1'] }) });
   seed.settings.dayBoundaryHour = 12; seed.settings.theme = 'sepia';
   const a = boot(seed, '2026-08-21');
-  ok('古すぎる日付の記録は捨てる（その月までは遡れない）', a.html('hero').includes('class="bignum">2<') && a.w.document.getElementById('grid-prev').disabled, a.html('hero').slice(0, 80));
+  ok('古すぎる日付の記録は数えない', a.html('hero').includes('class="bignum">2<') && stats(a).days === '2 日', a.html('hero').slice(0, 80));
+  a.w.document.querySelector('.cell.today').click();
+  a.w.document.querySelector('#sheet-body .toggle').click();
+  ok('古すぎる日付の記録も保存し直したときに消えない', !!a.state().logs['1026-10-20'], JSON.stringify(Object.keys(a.state().logs)));
   a.w.document.getElementById('nav-settings').click();
   ok('選べない区切り時刻は既定の4時に戻る', a.w.document.getElementById('boundary').value === '4', a.w.document.getElementById('boundary').value);
   ok('選べないテーマはシステムに戻る', a.w.document.getElementById('theme').value === 'system' && !a.w.document.documentElement.hasAttribute('data-theme'),
@@ -947,6 +974,18 @@ console.log('\n― 月めくり ―');
   ok('今日の記録があれば「今日の間だけ残る」と伝える', msgs[0].includes('今日の間だけ残ります'), msgs[0]);
   ok('実際に今日の間はホームに残る', [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(',') === 'スクワット10回,B（アーカイブ済み）',
      [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(','));
+}
+{
+  // 使い始めた日より前の日のシートには、その週の結果を出さない（判定していないため）
+  const tasks = [
+    { id: 'a', name: 'A', order: 0, archived: true, createdAt: '2026-08-10', archivedAt: '2026-08-10' },
+    Object.assign({}, TASKS[0], { order: 1, createdAt: '2026-08-12' })
+  ];
+  const a = boot(base({ tasks, logs: Object.assign({ '2026-08-10': ['a'] }, span('2026-08-12', '2026-08-21')) }), '2026-08-21');
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '10').click();
+  ok('使い始めた日より前の日には週の結果を出さない', !a.text('sheet-body').includes('この週は'), a.text('sheet-body'));
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '13').click();
+  ok('使い始めた日以降の日には週の結果を出す', a.text('sheet-body').includes('この週はシールドを1枚獲得しました。'), a.text('sheet-body'));
 }
 {
   // 達成日数も、使い始めた日より前の記録は数えない（連続日数とそろえる）

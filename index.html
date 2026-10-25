@@ -15,7 +15,7 @@
 /* 描画前にテーマを当てる（切り替え時のちらつき防止） */
 (function(){
   try{
-    var raw = localStorage.getItem('ember.v1') || localStorage.getItem('tsuzukeru.v1') || '{}';
+    var raw = localStorage.getItem('ember.v1') || '{}';
     var s = JSON.parse(raw);
     var t = (s.settings && s.settings.theme) || 'system';
     if(t !== 'system') document.documentElement.setAttribute('data-theme', t);
@@ -33,7 +33,7 @@
   --bg:var(--paper); --surface:#FFFFFF; --surface2:#F1EEE8;
   --text:var(--ink); --muted:#8B857C; --border:rgba(21,18,14,.13);
   --rule:rgba(21,18,14,.13);
-  --on-ember:#FAF8F4; --gold:#A8761B; --danger:#B3261E;
+  --on-ember:#FAF8F4; --gold:#7A5410; --danger:#B3261E; --due:#B03A1A;
 
   --serif:ui-serif,"New York","Hiragino Mincho ProN",Georgia,"Times New Roman",serif;
 
@@ -49,7 +49,7 @@
     --bg:#0A0809; --surface:rgba(255,255,255,.035); --surface2:rgba(255,255,255,.06);
     --text:#F3EBE3; --muted:#8B7B6E; --border:rgba(255,255,255,.09);
     --rule:rgba(255,255,255,.09);
-    --on-ember:#140D08; --gold:#F59E0B; --danger:#F87171;
+    --on-ember:#140D08; --gold:#F59E0B; --danger:#F87171; --due:#F98C28;
 
     --num-fill:transparent;
     --num-bg:linear-gradient(180deg,#FFF3E4 0%,var(--ember) 88%);
@@ -64,7 +64,7 @@
   --bg:#0A0809; --surface:rgba(255,255,255,.035); --surface2:rgba(255,255,255,.06);
   --text:#F3EBE3; --muted:#8B7B6E; --border:rgba(255,255,255,.09);
   --rule:rgba(255,255,255,.09);
-  --on-ember:#140D08; --gold:#F59E0B; --danger:#F87171;
+  --on-ember:#140D08; --gold:#F59E0B; --danger:#F87171; --due:#F98C28;
 
   --num-fill:transparent;
   --num-bg:linear-gradient(180deg,#FFF3E4 0%,var(--ember) 88%);
@@ -130,7 +130,9 @@ h2{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.2em;margin:
   border-left:1px solid var(--rule);padding-left:12px;text-align:left;
 }
 .stat:first-child{border-left:0;padding-left:0}
-.stat b{display:block;font-size:15px;color:var(--text);margin-top:5px;font-weight:600;letter-spacing:0}
+.stat b{display:block;font-size:15px;color:var(--text);margin-top:5px;font-weight:600;letter-spacing:0;white-space:nowrap}
+/* 「今週」の値は「週末でリセット」など長いので、ほかの欄より広く取る */
+.stat.week{flex:1.5}
 
 /* ---------- tasks ---------- */
 .tasks{list-style:none;margin:0;padding:0}
@@ -153,8 +155,10 @@ h2{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.2em;margin:
 .task.done{background-color:var(--ember-soft)}
 .task .name{flex:1;font-size:16px;font-weight:500;line-height:1.35;word-break:break-word}
 .task.done .name{color:var(--muted)}
-/* 通算実行回数。桁が変わっても丸の位置が動かないよう tabular-nums で揃える */
+/* 今週の回数（設定画面では通算回数）。桁が変わっても丸の位置が動かないよう tabular-nums で揃える */
 .tally{flex:none;font-size:11px;color:var(--muted);letter-spacing:.06em;font-variant-numeric:tabular-nums}
+/* 今週の判定に入るのに、まだ一度もやっていないタスク */
+.tally.due{color:var(--due);font-weight:600}
 
 /* 丸は状態と進捗を出すだけの表示。押下対象は行そのもの */
 .btn{position:relative;width:44px;height:44px;flex:none;padding:0;border:0;background:transparent}
@@ -183,9 +187,10 @@ h2{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.2em;margin:
 .gridnav{display:flex;align-items:center;gap:8px}
 .navbtn{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;width:26px;height:26px;padding:0;font-size:13px;line-height:1;flex:none;cursor:pointer}
 .navbtn:disabled{opacity:.25;cursor:default}
-.wd{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:10px} /* 1週目のバッジがはみ出す分の余白 */
+/* 7列の日付の右に、週の結果を出す細い列を1本足す */
+.wd{display:grid;grid-template-columns:repeat(7,1fr) 20px;gap:6px;margin-bottom:10px} /* 1週目のバッジがはみ出す分の余白 */
 .wd span{text-align:center;font-size:8.5px;letter-spacing:.1em;color:var(--muted)}
-.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.grid{display:grid;grid-template-columns:repeat(7,1fr) 20px;gap:6px}
 .cell{
   aspect-ratio:1;border-radius:var(--cell-radius);background:var(--surface2);
   position:relative;cursor:pointer;display:grid;place-items:center;
@@ -210,15 +215,25 @@ h2{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.2em;margin:
 @supports (width:1cqw){
   .cell .count{ --u:2cqw }
 }
-.cell.shield{background:transparent;box-shadow:inset 0 0 0 1.5px var(--gold);color:var(--gold)}
 .cell.future{opacity:.3;pointer-events:none}
-/* 今日の枠線はマスの内側に引く。外に出すと gap(6px) を隣のマスのバッジと
-   食い合って重なるため（シールドのマスの内側リングと同じ考え方） */
+/* 今日の枠線はマスの内側に引く。外に出すと gap(6px) を隣のマスのバッジと食い合って重なるため */
 .cell.today{outline:1px solid var(--text);outline-offset:-1px}
 .cell.out{opacity:.45}
 .cell.out.future{opacity:.15}
-.legend{display:flex;gap:16px;justify-content:center;margin-top:18px;font-size:9.5px;letter-spacing:.08em;color:var(--muted)}
-.legend i{width:9px;height:9px;border-radius:2px;display:inline-block;vertical-align:0;margin-right:6px}
+
+/* 週の結果。獲得は金で塗り、消費は金の枠だけ、リセットは控えめに × */
+.wk{align-self:center;justify-self:center;display:grid;place-items:center;
+  width:18px;height:18px;border-radius:999px;
+  font-size:9.5px;font-weight:700;font-style:normal;font-variant-numeric:tabular-nums;color:var(--muted)}
+.wk.earn{background:var(--gold);color:var(--bg)}
+.wk.protect{box-shadow:inset 0 0 0 1.5px var(--gold);color:var(--gold)}
+.wk.reset{font-size:11px;font-weight:400}
+
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;justify-content:center;margin-top:18px;font-size:9.5px;letter-spacing:.08em;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center}
+.legend i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px}
+.legend .wk{width:15px;height:15px;font-size:7.5px;margin-right:5px;letter-spacing:0}
+.legend .wk.reset{font-size:10px}
 
 /* ---------- settings ---------- */
 .card{border-top:1px solid var(--rule);padding:22px 0 4px;margin-bottom:8px}
@@ -295,13 +310,16 @@ nav button.on svg{stroke-width:1.9}
 
     <section class="gridwrap">
       <div class="gridhead"><h2 id="grid-title"></h2><div class="gridnav"><span class="range" id="range"></span><button class="navbtn" id="grid-prev" aria-label="前の月">‹</button><button class="navbtn" id="grid-next" aria-label="次の月">›</button></div></div>
-      <div class="wd"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>
+      <div class="wd"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span><i aria-hidden="true"></i></div>
       <div class="grid" id="grid"></div>
       <div class="legend">
         <span><i style="background:var(--ember)"></i>達成</span>
-        <span><i style="box-shadow:inset 0 0 0 1.5px var(--gold)"></i>シールド</span>
         <span><i style="background:var(--surface2)"></i>未達</span>
+        <span><b class="wk earn">+1</b>シールド獲得</span>
+        <span><b class="wk protect">−1</b>シールド消費</span>
+        <span><b class="wk reset">×</b>リセット</span>
       </div>
+      <p class="note" style="text-align:center;margin-top:10px">全タスクを1回以上やり、毎日つないだ週はシールド +1</p>
     </section>
   </div>
 
@@ -340,10 +358,10 @@ nav button.on svg{stroke-width:1.9}
 
     <div class="card">
       <h2>記録</h2>
-      <div class="row"><span class="name">累計ポイント</span><b id="s-pt">0</b></div>
-      <div class="row"><span class="name">保有シールド</span><b id="s-sh">0</b></div>
+      <div class="row"><span class="name">達成日数</span><b id="s-days">0 日</b></div>
+      <div class="row"><span class="name">保有シールド</span><b id="s-sh">0 枚</b></div>
       <div class="row"><span class="name">自己ベスト</span><b id="s-best">0 日</b></div>
-      <div class="row"><span class="name">シールド消費</span><b id="s-used">0 日</b></div>
+      <div class="row"><span class="name">シールドで守った週</span><b id="s-used">0 週</b></div>
     </div>
 
     <div class="card">
@@ -387,9 +405,12 @@ nav button.on svg{stroke-width:1.9}
 
 /* ============ 定数 ============ */
 const KEY = 'ember.v1';
-const LEGACY_KEYS = ['tsuzukeru.v1'];
-const PT_PER_SHIELD = 7;
 const PRESS_MS = 500;
+/** 設定画面で選べる値。これ以外が入っていたら既定値に戻す */
+const BOUNDARY_HOURS = [0, 2, 3, 4, 5];
+const THEMES = ['system', 'light', 'dark'];
+/** 登録日・アーカイブ日がこれより前なら持たない（年の打ち間違いで使い始めた日が大昔になり、何万週もたどらないように） */
+const MIN_DATE = '2000-01-01';
 const WD = ['日','月','火','水','木','金','土'];
 
 /* 連続日数 → 色。ライトは深く沈み、ダークは明るく燃える */
@@ -401,34 +422,81 @@ let state = load();
 
 function blank(){
   return {
-    version: 1,
+    version: 2,
     settings: { dayBoundaryHour: 4, theme: 'system' },   // theme: system | light | dark
-    tasks: [],
+    tasks: [],                // { id, name, order, archived, createdAt, archivedAt }
     logs: {},                 // "YYYY-MM-DD": [taskId, ...]
-    shieldsConsumed: [],      // ["YYYY-MM-DD", ...]
-    meta: { lastCheckedDate: null, bestStreak: 0, lastBackupAt: null }
+    meta: { lastBackupAt: null }
   };
 }
-function load(){
-  try{
-    let raw = localStorage.getItem(KEY);
-    if(!raw){
-      // 旧名のデータがあれば引き継ぐ
-      for(const k of LEGACY_KEYS){
-        const old = localStorage.getItem(k);
-        if(old){ raw = old; localStorage.setItem(KEY, old); localStorage.removeItem(k); break; }
-      }
-    }
-    if(!raw) return blank();
-    const s = JSON.parse(raw);
-    const b = blank();
-    return Object.assign(b, s, {
-      settings: Object.assign(b.settings, s.settings||{}),
-      meta: Object.assign(b.meta, s.meta||{})
+/**
+ * 欠けている設定の既定値を補い、形をそろえる。読み込みと復元の両方で通す。
+ * 手で編集したバックアップのような壊れた入力でも、描画が止まったり固まったり、
+ * 画面から直せない状態になったりしないようにする
+ */
+function normalize(s){
+  const b = blank(), def = blank().settings;
+  const out = Object.assign(b, s, {
+    settings: Object.assign(b.settings, s.settings||{}),
+    meta: Object.assign(b.meta, s.meta||{})
+  });
+  if(!BOUNDARY_HOURS.includes(out.settings.dayBoundaryHour)) out.settings.dayBoundaryHour = def.dayBoundaryHour;
+  if(!THEMES.includes(out.settings.theme)) out.settings.theme = def.theme;
+  const now = today(out.settings.dayBoundaryHour);   // 読み込み中は state がまだないので区切り時刻を渡す
+  // id は文字列にそろえる（数値の id を捨てると、そのタスクと記録がすべて消えるため）
+  const toId = id => typeof id === 'string' ? id : typeof id === 'number' ? String(id) : null;
+  // tasks は id を持つものだけ。アーカイブは真偽値にそろえ、並び順は今の並びのまま
+  // 0 から振り直す（欠けや重複があると上下ボタンで並べ替えられないため）
+  out.tasks = (Array.isArray(out.tasks) ? out.tasks : [])
+    .filter(task => task && toId(task.id) !== null)
+    .map((task, i) => ({ task, i, o: Number.isFinite(task.order) ? task.order : Infinity }))
+    .sort((a, b) => (a.o - b.o) || (a.i - b.i))
+    .map(({ task }, order) => {
+      const clean = Object.assign({}, task, { id: toId(task.id), order, archived: task.archived === true });
+      // 正しくない日付は持たない（年の打ち間違いで使い始めた日が大昔になり、何万週もたどらないように）
+      for(const k of ['createdAt', 'archivedAt']) if(!isDateKey(clean[k]) || clean[k] < MIN_DATE) delete clean[k];
+      // 未来のアーカイブ日は今日にそろえる（毎週必須のまま残り、画面から外せなくなるため）
+      if(clean.archivedAt > now) clean.archivedAt = now;
+      return clean;
     });
-  }catch(e){ return blank(); }
+  // logs は「正しい日付 → 重複のない id の配列（空でない）」だけ。
+  // どのタスクにも当てはまらない id も捨てない（tasks が壊れていると記録がすべて消えるため）。
+  // そうした記録は過去日のシートに「削除されたタスク」として出し、画面から消せるようにする
+  const logs = {};
+  if(out.logs && typeof out.logs === 'object'){
+    for(const [d, ids] of Object.entries(out.logs)){
+      // 1つだけの id が配列でなく書かれていても、配列として扱う
+      const list = [...new Set((Array.isArray(ids) ? ids : [ids]).map(toId).filter(id => id !== null))];
+      if(isDateKey(d) && list.length) logs[d] = list;
+    }
+  }
+  out.logs = logs;
+  return out;
 }
+function load(){
+  let raw = null;
+  try{
+    raw = localStorage.getItem(KEY);
+    return raw ? normalize(JSON.parse(raw)) : blank();
+  }catch(e){
+    // 読めなかった元データは、次の保存で上書きされる前に退避する
+    // 退避先は毎回別の名前にする（前に退避したデータも、今回のデータも上書きしない）
+    if(raw){
+      const BROKEN = KEY + '.broken.' + Date.now();
+      let kept = false;
+      try{ localStorage.setItem(BROKEN, raw); kept = localStorage.getItem(BROKEN) === raw; }catch(_){}
+      const msg = '保存データを読み込めなかったため、空の状態で起動しました。' + (kept
+        ? '元のデータは端末内の「' + BROKEN + '」に残しています。'
+        : '元のデータを退避できませんでした。バックアップから復元してください。');
+      setTimeout(()=> alert(msg), 0);
+    }
+    return blank();
+  }
+}
+/** 保存のたびに増える。computeHistory() の使い回しを捨てる目印 */
+let revision = 0;
 function save(){
+  revision++;
   try{ localStorage.setItem(KEY, JSON.stringify(state)); }
   catch(e){ alert('保存に失敗しました。ストレージの空き容量を確認してください。'); }
 }
@@ -437,71 +505,140 @@ function save(){
 function iso(d){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
+/** YYYY-MM-DD の実在する日付か */
+function isDateKey(s){ return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && iso(parseISO(s)) === s; }
 function parseISO(s){ const p=s.split('-').map(Number); return new Date(p[0],p[1]-1,p[2]); }
 function addDays(s,n){ const d=parseISO(s); d.setDate(d.getDate()+n); return iso(d); }
 function ym(s){ return s.slice(0,7); }
 function ymShift(s,n){ const p=s.split('-').map(Number); const d=new Date(p[0],p[1]-1+n,1);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 /** 午前4時区切りを反映した「今日」 */
-function today(){
-  return iso(new Date(Date.now() - state.settings.dayBoundaryHour*3600000));
+function today(hour = state.settings.dayBoundaryHour){
+  return iso(new Date(Date.now() - hour*3600000));
 }
 
 /* ============ 導出値（保存しない） ============ */
 /** その日に消化したタスク数 */
 function doneCount(date){ const l = state.logs[date]; return l ? l.length : 0; }
-/** タスクごとの通算実行回数。連続日数と同じく保存せず、記録から毎回数え直す */
-function taskCounts(){
-  const c = Object.create(null);
-  for(const ids of Object.values(state.logs)){
-    if(!Array.isArray(ids)) continue;
-    for(const id of ids) c[id] = (c[id] || 0) + 1;
-  }
+/** タスクごとの通算実行回数。連続日数と同じく保存せず、記録から毎回数え直す。使い始めた日から今日までを数える */
+function taskCounts(h){
+  const t = today(), c = Object.create(null);
+  for(const [d, ids] of Object.entries(state.logs)) if(d >= h.start && d <= t) for(const id of ids) c[id] = (c[id] || 0) + 1;
   return c;
 }
 function isDone(date){ return doneCount(date) > 0; }
-function points(){ return Object.keys(state.logs).filter(isDone).length; }
-function shieldsGenerated(){ return Math.floor(points()/PT_PER_SHIELD); }
-function shieldsAvailable(){ return shieldsGenerated() - state.shieldsConsumed.length; }
-function ptToNextShield(){ return PT_PER_SHIELD - (points() % PT_PER_SHIELD); }
+/** 達成した日。未来日のログ（復元データ由来）は数えない */
+function doneDates(){ const t = today(); return Object.keys(state.logs).filter(d => d <= t && isDone(d)); }
+/** 達成日数。連続日数と同じく、使い始めた日より前の記録は数えない */
+function doneDays(h){ return doneDates().filter(d => d >= h.start).length; }
+/** その日を含む週の日曜。カレンダーと同じく日曜始まり */
+function weekStart(s){ return addDays(s, -parseISO(s).getDay()); }
+/** 最初の達成日。記録が1件もなければ null */
+function firstDate(){
+  // MIN_DATE より前の記録（年の打ち間違い）は数えない
+  return doneDates().filter(d => d >= MIN_DATE).reduce((min,d)=> !min || d < min ? d : min, null);
+}
+/** 登録した日のうちにアーカイブしたタスク（打ち間違いの取り消し） */
+function isTypo(task){ return task.archived && task.archivedAt <= task.createdAt; }
+/**
+ * 使い始めた日 = 最初にタスクを登録した日。最初の週はこの日から判定する。
+ * 記録によって動かないので、あとから記録を足して結果が悪くなることがない。
+ * 登録した日のうちにアーカイブしたタスク（打ち間違いの取り消し）は、記録の有無にかかわらず数えない
+ * （記録で判断すると、記録の足し引きで使い始めた日が動いてしまうため）。
+ * タスクがまだなければ今日
+ */
+function startDate(t){
+  return state.tasks
+    .filter(task => !isTypo(task))
+    .reduce((min, task) => task.createdAt < min ? task.createdAt : min, t);
+}
+/** 週 w の判定開始日。最初の週だけは start（使い始めた日）から */
+function weekFrom(w, start){ return w < start ? start : w; }
+/**
+ * その週に必須のタスク。from は判定開始日（通常は日曜、最初の週だけは使い始めた日）。
+ * 判定開始日までに登録していて、判定開始日のうちにはアーカイブしなかったもの。
+ * 週の途中でアーカイブしても、その週はまだ必須で翌週から外れる
+ * （やらなかったタスクを判定から逃がせないように）。判定開始日にアーカイブすれば、その週から外れる
+ */
+function isRequired(task, from){
+  return task.createdAt <= from && (!task.archived || task.archivedAt > from);
+}
+function requiredTasks(from){ return state.tasks.filter(task => isRequired(task, from)); }
 
-/** 連続日数：記録から毎回計算し直す */
-function streak(){
-  const consumed = new Set(state.shieldsConsumed);
-  const t = today();
-  let d = isDone(t) ? t : addDays(t,-1);  // 今日が未達でも、まだ1日は終わっていない
-  let n = 0, guard = 0;
-  while(guard++ < 4000){
-    if(isDone(d)) { n++; d = addDays(d,-1); }
-    else if(consumed.has(d)) { d = addDays(d,-1); }   // 維持するが日数は増えない
-    else break;
-  }
-  return n;
+/**
+ * その日の一覧に出すタスク。その日に記録があるものは、消せるように必ず出す。
+ * それ以外は、その日までに登録していたもののうち、未アーカイブのものと、その週の判定に入るもの。
+ * 過去日のシート（withExisted）では、その日にまだあったもの（その日以降にアーカイブ。
+ * 登録した日にアーカイブした打ち間違いは除く）も出し、記録し忘れや誤って消した記録を直せるようにする。
+ * ホームには出さない（アーカイブした直後に一覧から消えるように）。
+ * 登録した日より前の日には記録させない（さかのぼって埋めると、最初の週の判定がずれるため）
+ */
+function tasksForDay(date, h, withExisted){
+  const req = new Set(h.requiredIds[weekStart(date)] || []);
+  const ids = state.logs[date] || [];
+  return state.tasks
+    // 登録日より前に記録させないのはシートだけ。ホーム（今日）では、時計が戻って
+    // 登録日が今日より後になっても記録できるようにする
+    .filter(x => ids.includes(x.id) || ((!withExisted || x.createdAt <= date) && (!x.archived || req.has(x.id) ||
+      (withExisted && x.archivedAt >= date && !isTypo(x)))))
+    .sort((a,b)=>a.order-b.order);
+}
+
+/** 一覧に出すタスク名。今週の判定にまだ入るアーカイブ済みタスクは、どの日の一覧でも「今週まで」と添える */
+function taskLabel(task, h){
+  if(!task.archived) return task.name;
+  return task.name + (h.requiredSet.has(task.id) ? '（今週まで）' : '（アーカイブ済み）');
 }
 
 /**
- * シールドの自動消費。PWAはバックグラウンドで動けないため、
- * 起動時に未達だった日を遡って処理する。
- * 連続が切れることが確定している場合は消費しない（無駄遣い防止）。
+ * 連続日数・シールド・週の結果を、使い始めた週から記録をたどって計算し直す（保存しない）。
+ * 使い始めた日より前の記録は、判定にも連続日数にも数えない。
+ * 週（日〜土）が終わるごとに判定する：毎日達成し、必須タスクを全部1回以上やった週は +1枚。
+ * そうでない週は1枚使って連続を維持し、手持ちがなければ翌週の日曜から0日に戻る。
+ * 週の途中の空白日は日数が増えないだけで、途切れはしない。
+ * 全週をたどるので、保存か日付の変化があるまでは前回の結果を使い回す
  */
-function processShields(){
+let memo = null;
+function computeHistory(){
   const t = today();
-  if(state.meta.lastCheckedDate === t) return;
+  if(memo && memo.state === state && memo.revision === revision && memo.t === t) return memo.h;
 
-  if(Object.keys(state.logs).length){
-    const consumed = new Set(state.shieldsConsumed);
-    const gaps = [];
-    let d = addDays(t,-1), guard = 0;
-    while(guard++ < 4000 && !isDone(d) && !consumed.has(d)) { gaps.push(d); d = addDays(d,-1); }
-
-    // 直前に「生きている日」が存在し、手持ちで全部埋め切れる場合のみ消費する
-    const alive = isDone(d) || consumed.has(d);
-    if(alive && gaps.length > 0 && gaps.length <= shieldsAvailable()){
-      state.shieldsConsumed = state.shieldsConsumed.concat(gaps).sort();
+  const first = firstDate(), start = startDate(t), cur = weekStart(t);
+  // gap / from / required / requiredSet / missing / counts は、ループが必ず今週に着いて入れる
+  const h = { first, start, streak:0, best:0, shields:0, protected:0, weeks:{}, requiredIds:{} };
+  let run = 0;
+  for(let w = weekStart(start); w <= cur; w = addDays(w,7)){
+    const from = weekFrom(w, start);
+    const end = w === cur ? t : addDays(w,6);
+    const counts = Object.create(null);   // その週にタスクごとに何日やったか
+    let gap = false;
+    for(let d = from; d <= end; d = addDays(d,1)){
+      const ids = state.logs[d] || [];
+      if(ids.length){ run++; if(run > h.best) h.best = run; }
+      else if(d < t) gap = true;   // 今日はまだ終わっていない
+      for(const id of ids) counts[id] = (counts[id] || 0) + 1;
     }
+    const required = requiredTasks(from);
+    const missing = required.filter(task => !counts[task.id]);
+    h.requiredIds[w] = required.map(task => task.id);   // 過去日のシートが同じ判定を使えるように
+    if(w === cur){ Object.assign(h, { from, gap, required, requiredSet: new Set(required.map(x=>x.id)), missing, counts }); break; }   // 今週はまだ判定しない
+
+    // 必須タスクが1つもない週は、空白日がなければ判定しない（+1も−1もしない）。
+    // タスクを足す前の週を埋めてシールドを稼げないように、かつタスクを入れ替えた週を罰しないように
+    if(!gap && !required.length) continue;
+    if(!gap && !missing.length){ h.shields++; h.weeks[w] = 'earn'; }
+    else if(h.shields > 0){ h.shields--; h.protected++; h.weeks[w] = 'protect'; }
+    else { run = 0; h.weeks[w] = 'reset'; }
   }
-  state.meta.lastCheckedDate = t;
-  save();
+  h.streak = run;
+  memo = { state, revision, t, h };
+  return h;
+}
+/** 今週の見込み。ホームの「今週」欄に出す */
+function weekOutlook(h){
+  if(h.gap) return h.shields ? '−1 枚 見込み' : '週末でリセット';
+  if(h.missing.length) return 'あと ' + h.missing.length + ' タスク';
+  return h.required.length ? '+1 枚 見込み' : '判定なし';
 }
 
 /* ============ 更新 ============ */
@@ -512,15 +649,6 @@ function toggleTask(date, taskId){
 
   if(list.length) state.logs[date] = list;
   else delete state.logs[date];
-
-  // 達成に変わった日にシールドを使っていたら返却する
-  if(list.length){
-    const j = state.shieldsConsumed.indexOf(date);
-    if(j >= 0) state.shieldsConsumed.splice(j,1);
-  }
-
-  const s = streak();
-  if(s > state.meta.bestStreak) state.meta.bestStreak = s;
   save();
 }
 
@@ -543,8 +671,8 @@ function rampColor(ramp, s){
   return a[1].map((v,i)=> Math.round(v + (b[1][i]-v)*t));
 }
 /** 連続日数に応じて色と熱量を更新する */
-function applyHeat(){
-  const s = streak();
+function applyHeat(h){
+  const s = (h || computeHistory()).streak;
   const [r,g,b] = rampColor(isDarkNow() ? RAMP_DARK : RAMP_LIGHT, s);
   const root = document.documentElement.style;
   root.setProperty('--ember', `rgb(${r},${g},${b})`);
@@ -577,16 +705,16 @@ function flash(){
 
 /* ============ 描画 ============ */
 function render(){
-  applyHeat();
-  renderHero();
-  renderTasks();
-  renderGrid();
-  renderSettings();
+  const h = computeHistory();   // 重いので1回だけ計算して使い回す
+  applyHeat(h);
+  renderHero(h);
+  renderTasks(h);
+  renderGrid(h);
+  renderSettings(h);
 }
 
-function renderHero(){
-  const t = today(), s = streak(), done = isDone(t), el = $('hero');
-  $('hint').textContent = state.tasks.filter(x=>!x.archived).length ? '長押しで記録' : '';
+function renderHero(h){
+  const t = today(), s = h.streak, done = isDone(t), el = $('hero');
 
   if(done){
     // 達成した日だけ大きく出す
@@ -595,9 +723,9 @@ function renderHero(){
       '<div class="bignum">'+s+'</div>'+
       '<div class="biglabel">日連続</div>'+
       '<div class="substats">'+
-        '<div class="stat">自己ベスト<b>'+state.meta.bestStreak+' 日</b></div>'+
-        '<div class="stat">シールド<b>'+shieldsAvailable()+' 枚</b></div>'+
-        '<div class="stat">次の1枚まで<b>あと '+ptToNextShield()+' 日</b></div>'+
+        '<div class="stat">自己ベスト<b>'+h.best+' 日</b></div>'+
+        '<div class="stat">シールド<b>'+h.shields+' 枚</b></div>'+
+        '<div class="stat week">今週<b>'+weekOutlook(h)+'</b></div>'+
       '</div>';
     $('tasks-title').textContent = '今日やったこと';
   } else {
@@ -606,16 +734,20 @@ function renderHero(){
     el.innerHTML =
       '<div class="statline">'+
         '<span class="lead"><span class="n">'+s+'</span> 日連続</span>'+
-        '<span class="aside">'+(shieldsAvailable() ? 'シールド '+shieldsAvailable() : '')+'</span>'+
+        '<span class="aside">'+(h.shields ? 'シールド '+h.shields : '')+'</span>'+
       '</div>';
     $('tasks-title').textContent = '今日やること';
   }
 }
 
-function renderTasks(){
+function renderTasks(h){
   const t = today(), ul = $('tasks');
-  const list = state.tasks.filter(x=>!x.archived).sort((a,b)=>a.order-b.order);
-  const counts = taskCounts();
+  // 今週アーカイブしたタスクも、今週の判定にまだ入るものは週が終わるまで残す（tasksForDay）
+  const list = tasksForDay(t, h);
+  $('hint').textContent = list.length ? '長押しで記録' : '';
+  const counts = h.counts;   // 今週タスクごとに何日やったか
+  // 今週の判定に入るのに、まだ一度もやっていないタスク
+  const due = new Set(h.missing.map(x=>x.id));
   ul.innerHTML = '';
 
   if(!list.length){
@@ -639,14 +771,18 @@ function renderTasks(){
         '<circle class="prog" cx="22" cy="22" r="18"></circle></svg>'+
         '<span class="core">✓</span>'+
       '</span>';
-    li.querySelector('.name').textContent = task.name;
-    li.querySelector('.tally').textContent = (counts[task.id] || 0) + ' 回';
+    li.querySelector('.name').textContent = taskLabel(task, h);
+    // 今週の回数。週の判定に入るのにまだ0回のタスクだけ色を付ける
+    const tally = li.querySelector('.tally');
+    tally.textContent = '今週 ' + (counts[task.id] || 0) + ' 回';
+    if(due.has(task.id)) tally.classList.add('due');
     attachPress(li, ()=>{
       toggleTask(t, task.id);
       const nowDone = (state.logs[t]||[]).includes(task.id);
       render();
       if(nowDone){
-        const fresh = ul.querySelector('.task[data-id="'+task.id+'"]');
+        // id にどんな文字が入っていても壊れないよう、セレクタは使わずに探す
+        const fresh = [...ul.children].find(li => li.dataset.id === task.id);
         if(fresh) fresh.classList.add('just');
         flash();
       }
@@ -659,18 +795,25 @@ function renderTasks(){
 /** 表示中の月（YYYY-MM）。起動時と日付が変わったときは今月に戻す */
 let gridMonth = null;
 
-/** 記録が残っている最も古い月。1件もなければ今月 */
-function firstRecordMonth(){
-  const dates = Object.keys(state.logs).filter(isDone).concat(state.shieldsConsumed);
-  return ym(dates.reduce((min,d)=> d < min ? d : min, today()));
+/** さかのぼれる最も古い月。使い始めた月か、記録のある最も古い月の早いほう */
+function earliestMonth(h){
+  const first = h.first && h.first < h.start ? h.first : h.start;
+  return ym(first);
 }
 
-function renderGrid(){
-  const t = today(), grid = $('grid');
-  const consumed = new Set(state.shieldsConsumed);
+/** 週の結果列の表記 */
+const WEEK_MARK = {
+  earn:    ['+1', 'シールドを1枚獲得した週',            'シールドを1枚獲得しました。'],
+  protect: ['−1', 'シールドを1枚使って連続を維持した週', 'シールドを1枚使って連続を維持しました。'],
+  reset:   ['×',  '連続がリセットされた週',            '連続がリセットされました。']
+};
 
-  // 記録のある月より前と、来月以降には行けない
-  const cur = ym(t), min = firstRecordMonth();
+function renderGrid(h){
+  const t = today(), grid = $('grid');
+  const weeks = h.weeks;
+
+  // 使い始めた月（または記録のある最も古い月）より前と、来月以降には行けない
+  const cur = ym(t), min = earliestMonth(h);
   if(!gridMonth || gridMonth > cur) gridMonth = cur;
   if(gridMonth < min) gridMonth = min;
 
@@ -697,7 +840,6 @@ function renderGrid(){
     if(date.getMonth() !== m) cls += ' out';
     if(future) cls += ' future';
     else if(n) cls += ' done';
-    else if(consumed.has(d)) cls += ' shield';
     if(d === t) cls += ' today';
     cell.className = cls;
     cell.textContent = date.getDate();
@@ -712,10 +854,24 @@ function renderGrid(){
 
     cell.onclick = ()=> openSheet(d);
     grid.appendChild(cell);
+
+    // 土曜のマスの右に、その週の結果を出す（今週、使い始めた週より前の週、判定しない週は空欄）
+    if(i % 7 === 6){
+      const r = weeks[weekStart(d)];
+      const wk = document.createElement('div');
+      wk.className = 'wk' + (r ? ' ' + r : '');
+      if(r){
+        wk.textContent = WEEK_MARK[r][0];
+        wk.title = WEEK_MARK[r][1];
+        wk.setAttribute('role', 'img');
+        wk.setAttribute('aria-label', WEEK_MARK[r][1]);
+      }
+      grid.appendChild(wk);
+    }
   }
 }
 
-function renderSettings(){
+function renderSettings(h){
   const box = $('task-editor');
   const list = state.tasks.filter(x=>!x.archived).sort((a,b)=>a.order-b.order);
   box.innerHTML = '';
@@ -723,21 +879,29 @@ function renderSettings(){
   if(!list.length){
     box.innerHTML = '<p class="note" style="margin:0">まだタスクがありません。</p>';
   }
+  const counts = taskCounts(h);
   list.forEach((task,i)=>{
     const row = document.createElement('div');
     row.className = 'row';
     row.innerHTML =
       '<span class="name"></span>'+
+      '<span class="tally"></span>'+
       '<button class="mini" title="上へ">↑</button>'+
       '<button class="mini" title="下へ">↓</button>'+
       '<button class="mini danger" title="削除">×</button>';
     row.querySelector('.name').textContent = task.name;
+    row.querySelector('.tally').textContent = '通算 ' + (counts[task.id] || 0) + ' 回';
     const b = row.querySelectorAll('.mini');
     b[0].onclick = ()=>{ if(i>0){ swap(list,i,i-1); save(); render(); } };
     b[1].onclick = ()=>{ if(i<list.length-1){ swap(list,i,i+1); save(); render(); } };
     b[2].onclick = ()=>{
-      if(confirm('「'+task.name+'」を一覧から外します。過去の記録は残ります。')){
-        task.archived = true; save(); render();
+      // 今日アーカイブしても今週の判定に残るか（判定開始日より後のアーカイブなら残る）
+      const archivedNow = Object.assign({}, task, { archived: true, archivedAt: today() });
+      const loggedToday = (state.logs[today()] || []).includes(task.id);
+      const still = isRequired(archivedNow, h.from) ? '今週の判定にはまだ含まれるので、ホームには今週の間だけ残ります。'
+        : loggedToday ? '今日の記録があるので、記録を取り消すまではホームに残ります。' : '';
+      if(confirm('「'+task.name+'」を一覧から外します。'+still+'過去の記録は残ります。')){
+        task.archived = true; task.archivedAt = today(); save(); render();
       }
     };
     box.appendChild(row);
@@ -745,10 +909,10 @@ function renderSettings(){
 
   $('theme').value = state.settings.theme || 'system';
   $('boundary').value = String(state.settings.dayBoundaryHour);
-  $('s-pt').textContent   = points();
-  $('s-sh').textContent   = shieldsAvailable() + ' 枚';
-  $('s-best').textContent = state.meta.bestStreak + ' 日';
-  $('s-used').textContent = state.shieldsConsumed.length + ' 日';
+  $('s-days').textContent = doneDays(h) + ' 日';
+  $('s-sh').textContent   = h.shields + ' 枚';
+  $('s-best').textContent = h.best + ' 日';
+  $('s-used').textContent = h.protected + ' 週';
   $('backup-note').textContent = state.meta.lastBackupAt
     ? '前回のバックアップ：' + state.meta.lastBackupAt
     : 'iOSは7日間開かれなかったアプリのデータを削除することがあります。定期的な書き出しを推奨します。';
@@ -824,25 +988,34 @@ function closeSheet(){
 }
 function renderSheet(){
   const body = $('sheet-body');
-  const list = state.tasks.filter(x=>!x.archived).sort((a,b)=>a.order-b.order);
+  const h = computeHistory();
   const cur = state.logs[sheetDate] || [];
+  const w = weekStart(sheetDate);
+  // アーカイブ済みでも、その日に関わるタスクは直せるように出す。
+  // どのタスクにも当てはまらない記録（手で編集したデータ由来）も、消せるように出す
+  const known = new Set(state.tasks.map(x=>x.id));
+  const rows = tasksForDay(sheetDate, h, true).map(task => ({ id: task.id, label: taskLabel(task, h) }))
+    .concat(cur.filter(id => !known.has(id)).map(id => ({ id, label: '（削除されたタスク）' })));
   body.innerHTML = '';
 
-  if(!list.length){ body.innerHTML = '<p class="note">タスクがありません。</p>'; return; }
-  list.forEach(task=>{
-    const on = cur.includes(task.id);
+  // タスクがない日でも、下の週の結果は出す
+  if(!rows.length) body.innerHTML = '<p class="note">タスクがありません。</p>';
+  rows.forEach(row=>{
+    const on = cur.includes(row.id);
     const el = document.createElement('div');
     el.className = 'toggle' + (on ? ' on' : '');
     el.innerHTML = '<span class="box">✓</span><span class="t"></span>';
-    el.querySelector('.t').textContent = task.name;
-    el.onclick = ()=>{ toggleTask(sheetDate, task.id); renderSheet(); render(); };
+    el.querySelector('.t').textContent = row.label;
+    el.onclick = ()=>{ toggleTask(sheetDate, row.id); renderSheet(); render(); };
     body.appendChild(el);
   });
 
-  if(state.shieldsConsumed.includes(sheetDate)){
+  // その日を含む週の結果。記録を直せば週の結果も計算し直される（使い始めた日より前の日は判定外）
+  const r = sheetDate >= h.start ? h.weeks[w] : null;
+  if(r){
     const p = document.createElement('p');
     p.className = 'note';
-    p.textContent = 'この日はシールドで連続を維持しました。達成に変更するとシールドは返却されます。';
+    p.textContent = 'この週は' + WEEK_MARK[r][2];
     body.appendChild(p);
   }
 }
@@ -857,13 +1030,13 @@ async function backup(){
 
   // iOSでは共有シート経由が最も確実（「ファイルに保存」を選べる）
   if(navigator.canShare && navigator.canShare({ files:[file] })){
-    try{ await navigator.share({ files:[file], title:name }); renderSettings(); return; }catch(e){ if(e.name==='AbortError'){ return; } }
+    try{ await navigator.share({ files:[file], title:name }); renderSettings(computeHistory()); return; }catch(e){ if(e.name==='AbortError'){ return; } }
   }
   const url = URL.createObjectURL(file);
   const a = document.createElement('a');
   a.href = url; a.download = name; a.click();
   setTimeout(()=>URL.revokeObjectURL(url), 4000);
-  renderSettings();
+  renderSettings(computeHistory());
 }
 function restore(file){
   const r = new FileReader();
@@ -872,7 +1045,7 @@ function restore(file){
       const s = JSON.parse(r.result);
       if(!s || typeof s !== 'object' || !('logs' in s)) throw new Error('形式が違います');
       if(!confirm('現在のデータを上書きします。よろしいですか？')) return;
-      state = Object.assign(blank(), s);
+      state = normalize(s);
       save(); applyTheme(); render();
       alert('復元しました。');
     }catch(e){ alert('読み込めませんでした：' + e.message); }
@@ -896,7 +1069,7 @@ $('add-task').onclick = ()=>{
   const name = input.value.trim();
   if(!name) return;
   const max = state.tasks.reduce((m,t)=>Math.max(m,t.order), -1);
-  state.tasks.push({ id:'t'+Date.now().toString(36), name, order:max+1, archived:false });
+  state.tasks.push({ id:'t'+Date.now().toString(36), name, order:max+1, archived:false, createdAt:today() });
   input.value = ''; input.blur(); save(); render();
 };
 $('new-task').addEventListener('keydown', e=>{ if(e.key==='Enter') $('add-task').click(); });
@@ -906,8 +1079,8 @@ $('backup').onclick = backup;
 $('restore-btn').onclick = ()=> $('restore').click();
 $('restore').onchange = e=>{ if(e.target.files[0]) restore(e.target.files[0]); e.target.value=''; };
 $('backdrop').onclick = closeSheet;
-$('grid-prev').onclick = ()=>{ gridMonth = ymShift(gridMonth,-1); renderGrid(); };
-$('grid-next').onclick = ()=>{ gridMonth = ymShift(gridMonth,+1); renderGrid(); };
+$('grid-prev').onclick = ()=>{ gridMonth = ymShift(gridMonth,-1); renderGrid(computeHistory()); };
+$('grid-next').onclick = ()=>{ gridMonth = ymShift(gridMonth,+1); renderGrid(computeHistory()); };
 
 // バックグラウンドから復帰したとき、日付が変わっていれば作り直す
 let renderedDate = null;
@@ -919,9 +1092,6 @@ document.addEventListener('visibilitychange', ()=>{
 function boot(){
   applyTheme();
   gridMonth = null;
-  processShields();
-  const s = streak();
-  if(s > state.meta.bestStreak){ state.meta.bestStreak = s; save(); }
   renderedDate = today();
   render();
 }

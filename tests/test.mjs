@@ -36,14 +36,34 @@ function boot(seed, nowISO) {
   };
 }
 
-const TASKS = [{ id: 't1', name: 'スクワット10回', order: 0, archived: false }];
+const TASKS = [{ id: 't1', name: 'スクワット10回', order: 0, archived: false, createdAt: '2026-01-01' }];
 function base(over) {
   return Object.assign({
-    version: 1, settings: { dayBoundaryHour: 4 }, tasks: TASKS,
-    logs: {}, shieldsConsumed: {}.constructor === Object ? [] : [],
-    meta: { lastCheckedDate: null, bestStreak: 0, lastBackupAt: null }
+    version: 2, settings: { dayBoundaryHour: 4 }, tasks: TASKS,
+    logs: {}, meta: { lastBackupAt: null }
   }, over);
 }
+// from〜to（両端含む）の毎日に ids を記録した logs
+function span(from, to, ids = ['t1']) {
+  const logs = {};
+  const d = new Date(from + 'T12:00:00'), end = new Date(to + 'T12:00:00');
+  for (; d <= end; d.setDate(d.getDate() + 1)) {
+    const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    logs[k] = ids.slice();
+  }
+  return logs;
+}
+function without(logs, ...dates) { for (const d of dates) delete logs[d]; return logs; }
+const TWO = [
+  { id: 't1', name: 'スクワット', order: 0, archived: false, createdAt: '2026-01-01' },
+  { id: 't2', name: '懸垂', order: 1, archived: false, createdAt: '2026-01-01' }
+];
+// 設定画面の集計値（描画は毎回走るので、ホームにいたままでも読める）
+function stats(a) { return { days: a.text('s-days'), sh: a.text('s-sh'), best: a.text('s-best'), used: a.text('s-used') }; }
+// カレンダーの週の結果列。行の上から順に 'earn' / 'protect' / 'reset' / ''
+function marks(a) { return [...a.w.document.querySelectorAll('#grid .wk')].map(e => e.classList[1] || ''); }
+// 達成時のホームの「今週」欄
+function outlook(a) { const s = a.w.document.querySelectorAll('#hero .stat b'); return s.length ? s[2].textContent : null; }
 // カレンダーのマスの日付。消化数バッジを持つマスもあるので、先頭のテキストだけを見る
 function day(cell) { return cell.childNodes[0] ? cell.childNodes[0].textContent : ''; }
 // マスに出ている消化数バッジ（なければ null）
@@ -71,41 +91,299 @@ console.log('\n― 連続日数の計算 ―');
   ok('今日未達でも昨日までの5日は保持', a.html('hero').includes('>5</span>'), a.html('hero').slice(0, 120));
 }
 {
-  // 一昨日まで達成、昨日が空白、シールドなし → 途切れて0
-  const a = boot(base({ logs: daysBack('2026-08-19', 5) }), '2026-08-21');
-  ok('昨日が空白でシールドなし → 連続0', a.html('hero').includes('>0</span> 日連続'), a.html('hero'));
-}
-
-console.log('\n― シールドの自動消費 ―');
-{
-  // 14日達成（=14pt=2枚）、昨日だけ未達 → 1枚消費して連続維持、日数は増えない
-  const logs = daysBack('2026-08-19', 14);
-  const a = boot(base({ logs }), '2026-08-21');
-  const s = a.state();
-  ok('未達1日をシールドで自動的に埋める', s.shieldsConsumed.length === 1 && s.shieldsConsumed[0] === '2026-08-20', JSON.stringify(s.shieldsConsumed));
-  ok('シールド日は連続を維持するが日数は増えない（14のまま）', a.html('hero').includes('>14</span>'), a.html('hero').slice(0, 120));
+  // 8/15(土)に登録して8/15〜8/19 達成、昨日(8/20)が空白。週の途中なので途切れず、空白日の分だけ増えない
+  const a = boot(base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-08-15' })], logs: daysBack('2026-08-19', 5) }), '2026-08-21');
+  ok('週の途中の空白日では途切れない（5を保持）', a.html('hero').includes('>5</span> 日連続'), a.html('hero'));
 }
 {
-  // 7日達成（=1枚）、未達が3日 → 埋め切れないので消費しない
-  const logs = daysBack('2026-08-17', 7);
-  const a = boot(base({ logs }), '2026-08-21');
-  ok('埋め切れないときはシールドを浪費しない', a.state().shieldsConsumed.length === 0, JSON.stringify(a.state().shieldsConsumed));
-  ok('その場合は連続0になる', a.html('hero').includes('>0</span> 日連続'));
+  // 8/10(月)に使い始めた最初の週は土曜(8/15)が空白でシールドもない → 週末でリセットし、8/16(日)から数え直す
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-10' })];
+  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-10', '2026-08-14'), span('2026-08-16', '2026-08-21')) }), '2026-08-21');
+  ok('前提：最初の週は使い始めた日から判定され、リセット', marks(a)[2] === 'reset', marks(a).join(','));
+  ok('未達の週がシールドなしで終わると、翌日曜から数え直す', a.html('hero').includes('class="bignum">6<'), a.html('hero').slice(0, 80));
+}
+{
+  // 毎日つないでいても、懸垂を一度もやらなかった週はリセットされる（週ごと無効）
+  const a = boot(base({ tasks: TWO, logs: Object.assign(span('2026-08-09', '2026-08-15'), span('2026-08-16', '2026-08-21', ['t1', 't2'])) }), '2026-08-21');
+  ok('全タスクをやらなかった週は丸ごと無効になる', a.html('hero').includes('class="bignum">6<'), a.html('hero').slice(0, 80));
+  ok('その週の結果列はリセット', marks(a)[2] === 'reset', marks(a).join(','));
 }
 {
   // 記録が1件もない新規ユーザー
   const a = boot(base({}), '2026-08-21');
-  ok('新規ユーザーでシールド消費が走らない', a.state().shieldsConsumed.length === 0);
   ok('新規ユーザーは連続0', a.html('hero').includes('>0</span> 日連続'));
+  ok('新規ユーザーはシールド0', stats(a).sh === '0 枚', stats(a).sh);
 }
 
-console.log('\n― ポイントとシールドの生成 ―');
+console.log('\n― 週の判定とシールド ―');
 {
-  const a = boot(base({ logs: daysBack('2026-08-21', 15) }), '2026-08-21');
-  a.w.document.getElementById('nav-settings').click();
-  ok('15日達成 → 累計15pt', a.text('s-pt') === '15', a.text('s-pt'));
-  ok('15pt → シールド2枚', a.text('s-sh') === '2 枚', a.text('s-sh'));
-  ok('次の1枚まで あと6日', a.html('hero').includes('あと 6 日'), a.html('hero'));
+  // 8/9〜8/15 を毎日つないだ → +1枚。今週の8/16〜8/21 も続いている
+  const a = boot(base({ logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('毎日つなぎ全タスクをやった週 → シールド +1', stats(a).sh === '1 枚', stats(a).sh);
+  ok('連続は週をまたいで続く（13）', a.html('hero').includes('class="bignum">13<'), a.html('hero').slice(0, 80));
+  ok('結果列に獲得が出る', marks(a)[2] === 'earn', marks(a).join(','));
+}
+{
+  // 今週はまだ終わっていないので、毎日つないでいても付与しない
+  const a = boot(base({ logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  ok('今週分のシールドは週末まで付与しない', stats(a).sh === '0 枚', stats(a).sh);
+  ok('今週の結果列は空欄', marks(a)[3] === '', marks(a).join(','));
+}
+{
+  // 7/26週=獲得、8/2週=8/5が空白でシールド消費、8/9週=獲得、今週も継続
+  const a = boot(base({ logs: without(span('2026-07-26', '2026-08-21'), '2026-08-05') }), '2026-08-21');
+  ok('空白日のある週は1枚使って連続を維持する', stats(a).sh === '1 枚' && stats(a).used === '1 週', JSON.stringify(stats(a)));
+  ok('空白日は日数に数えない（7+6+7+6=26）', a.html('hero').includes('class="bignum">26<'), a.html('hero').slice(0, 80));
+  ok('結果列が 獲得・消費・獲得 と並ぶ', marks(a).slice(0, 3).join(',') === 'earn,protect,earn', marks(a).join(','));
+}
+{
+  // 空白日が何日あっても、1つの週で使うのは1枚だけ
+  const a = boot(base({ logs: Object.assign(span('2026-07-26', '2026-08-01'), span('2026-08-02', '2026-08-03'), span('2026-08-07', '2026-08-21')) }), '2026-08-21');
+  ok('空白日が3日あっても消費は1枚', stats(a).used === '1 週', JSON.stringify(stats(a)));
+}
+{
+  // 7/26週で1枚。8/2週・8/9週は何もしていない → 8/2週で1枚使い、8/9週でリセット。救済はしない
+  const a = boot(base({ logs: Object.assign(span('2026-07-26', '2026-08-01'), span('2026-08-16', '2026-08-21')) }), '2026-08-21');
+  ok('未達の週が続けば順に使い切る（返却しない）', stats(a).sh === '0 枚' && stats(a).used === '1 週', JSON.stringify(stats(a)));
+  ok('使い切った次の週でリセット', marks(a).slice(0, 3).join(',') === 'earn,protect,reset', marks(a).join(','));
+  ok('リセット後は今週の分だけ（6）', a.html('hero').includes('class="bignum">6<'), a.html('hero').slice(0, 80));
+}
+{
+  // 最初の週は、最初にタスクを登録した日（8/12 水）から判定する
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-12' })];
+  const a = boot(base({ tasks, logs: span('2026-08-12', '2026-08-15') }), '2026-08-22');
+  ok('最初の週はタスクを登録した日から土曜までで判定する', stats(a).sh === '1 枚', stats(a).sh);
+}
+{
+  // 登録した日に何もしなければ、その日も空白日になる（起点は最初の記録日ではない）
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-12' })];
+  const a = boot(base({ tasks, logs: span('2026-08-13', '2026-08-15') }), '2026-08-22');
+  ok('登録した日も空白日に数える', marks(a)[2] === 'reset', marks(a).join(','));
+}
+{
+  // あとから記録を足しても起点は動かない（記録を増やして結果が悪くなることがない）
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-17' })];
+  const a = boot(base({ tasks, logs: span('2026-08-17', '2026-08-22') }), '2026-08-24');
+  ok('前提：登録日から毎日やった最初の週は +1', marks(a)[3] === 'earn', marks(a).join(','));
+  // 登録前の 8/16 はシートに出ないので記録できない。登録後の日を足しても結果は変わらない
+  [...a.w.document.querySelectorAll('.cell')].find(c => day(c) === '16').click();
+  ok('登録前の日は記録できない', a.text('sheet-body') === 'タスクがありません。', a.text('sheet-body'));
+}
+{
+  // 打ち間違えて登録してすぐ消したタスクは、使い始めた日にも数えない
+  const tasks = [
+    { id: 't9', name: 'スクワト', order: 0, archived: true, createdAt: '2026-08-09', archivedAt: '2026-08-09' },
+    Object.assign({}, TASKS[0], { order: 1, createdAt: '2026-08-11' })
+  ];
+  const a = boot(base({ tasks, logs: span('2026-08-11', '2026-08-21') }), '2026-08-21');
+  ok('打ち間違いのタスクは使い始めた日に数えない', marks(a)[2] === 'earn', marks(a).join(','));
+}
+{
+  // 日曜になった瞬間に先週分が確定する
+  const a = boot(base({ logs: span('2026-08-16', '2026-08-22') }), '2026-08-23');
+  ok('週が明けるとシールドが付与される', a.html('hero').includes('シールド 1'), a.html('hero'));
+  ok('今日が未達でも連続は保持（7）', a.html('hero').includes('>7</span> 日連続'), a.html('hero'));
+}
+{
+  // 自己ベストは記録から導出する。リセットされた週の途中で届いていた日数も含む
+  const logs = Object.assign(span('2026-07-26', '2026-08-01', ['t1', 't2']), span('2026-08-02', '2026-08-15'), span('2026-08-16', '2026-08-21', ['t1', 't2']));
+  const a = boot(base({ tasks: TWO, logs }), '2026-08-21');
+  ok('自己ベストは過去の最長（21）', stats(a).best === '21 日', JSON.stringify(stats(a)));
+  ok('リセット後の連続は今週の分（6）', a.html('hero').includes('class="bignum">6<'), a.html('hero').slice(0, 80));
+}
+
+console.log('\n― 週に必須のタスク ―');
+{
+  // 週の途中（8/11 火）に追加したタスクは、その週の判定に入らない
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { createdAt: '2026-08-11' })];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('週の途中で追加したタスクは翌週から必須', marks(a)[2] === 'earn', marks(a).join(','));
+}
+{
+  // 日曜に追加したタスクはその週から必須
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { createdAt: '2026-08-09' })];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('日曜に追加したタスクはその週から必須', marks(a)[2] === 'reset', marks(a).join(','));
+}
+{
+  // 最初の週は、使い始めた日（8/12 水）に登録したタスクが必須。懸垂をやらなければリセット
+  const tasks = [Object.assign({}, TWO[0], { createdAt: '2026-08-12' }), Object.assign({}, TWO[1], { createdAt: '2026-08-12' })];
+  const a = boot(base({ tasks, logs: span('2026-08-12', '2026-08-21') }), '2026-08-21');
+  ok('使い始めた日に登録したタスクは最初の週から必須', marks(a)[2] === 'reset', marks(a).join(','));
+  // 懸垂がなければ同じ記録で +1 になる（このテストが懸垂の有無で結果を分けていることの確認）
+  const b = boot(base({ tasks: [tasks[0]], logs: span('2026-08-12', '2026-08-21') }), '2026-08-21');
+  ok('前提：懸垂がなければ最初の週は +1', marks(b)[2] === 'earn', marks(b).join(','));
+}
+{
+  // その週のうちにアーカイブしても、その週はまだ必須（やらなかったタスクを判定から逃がせない）
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-13' })];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('アーカイブした週はまだ必須', marks(a)[2] === 'reset', marks(a).join(','));
+  ok('翌週からは必須でなくなる', outlook(a) === '+1 枚 見込み', String(outlook(a)));
+}
+{
+  // 抜け道：土曜にアーカイブし、翌日に同じタスクを登録し直しても、その週は救われない
+  const tasks = [
+    TWO[0],
+    Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-15' }),
+    { id: 't3', name: '懸垂', order: 2, archived: false, createdAt: '2026-08-16' }
+  ];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('土曜にアーカイブして登録し直しても、その週は未達', marks(a)[2] === 'reset', marks(a).join(','));
+}
+{
+  // 判定開始日（日曜）にアーカイブしたタスクは、その週から外れる
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-09' })];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('日曜にアーカイブしたタスクはその週から必須でない', marks(a)[2] === 'earn', marks(a).join(','));
+}
+{
+  // 今週の判定にまだ入るアーカイブ済みタスクは、シートでもホームと同じく「今週まで」と出す
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-19' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  a.w.document.querySelector('.cell.today').click();
+  const labels = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent).join(',');
+  ok('シートでも「今週まで」と出す', labels === 'スクワット,懸垂（今週まで）', labels);
+  // 先週の日のシートでも、今週の判定にまだ入るなら同じく「今週まで」
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '12').click();
+  const past = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent).join(',');
+  ok('先週の日のシートでも「今週まで」と出す', past === 'スクワット,懸垂（今週まで）', past);
+}
+{
+  // 今週の日曜にアーカイブしたタスクはホームにも残らず、今週の見込みにも入らない
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-16' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  ok('今週の日曜にアーカイブしたタスクは今週の見込みに入らない', outlook(a) === '+1 枚 見込み', String(outlook(a)));
+  ok('ホームにも残らない', a.w.document.querySelectorAll('.task').length === 1, String(a.w.document.querySelectorAll('.task').length));
+}
+{
+  // 日曜にアーカイブするときは「今週の間だけ残る」と言わない
+  const a = boot(base({ tasks: TWO, logs: span('2026-08-16', '2026-08-22') }), '2026-08-23');
+  const msgs = []; a.w.confirm = m => { msgs.push(m); return false; };
+  a.w.document.querySelectorAll('#task-editor .mini.danger')[1].click();
+  ok('日曜のアーカイブでは「今週の間だけ残る」と言わない', !msgs[0].includes('今週の間だけ残ります'), msgs[0]);
+}
+{
+  // 前の週までにアーカイブしたタスクは、その週の判定に入らない
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-08' })];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('前の週までにアーカイブしたタスクは必須でない', marks(a)[2] === 'earn', marks(a).join(','));
+}
+{
+  // 終わった週の判定は、あとでアーカイブしても変わらない
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-17' })];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('アーカイブより前の週はそのまま必須', marks(a)[2] === 'reset', marks(a).join(','));
+}
+
+{
+  // タスクを入れ替えた週（日曜に全部アーカイブし、火曜に新しく登録）は必須タスクがない。
+  // 空白日がなければ判定しない（+1も−1もしない）
+  const tasks = [
+    Object.assign({}, TASKS[0], { createdAt: '2026-08-02', archived: true, archivedAt: '2026-08-09' }),
+    Object.assign({}, TWO[1], { createdAt: '2026-08-11' })
+  ];
+  const logs = Object.assign(span('2026-08-02', '2026-08-10'), span('2026-08-11', '2026-08-21', ['t2']));
+  const a = boot(base({ tasks, logs }), '2026-08-21');
+  ok('必須タスクのない週ではシールドを獲得しない', stats(a).sh === '1 枚', JSON.stringify(stats(a)));
+  ok('必須タスクのない週は判定しない（結果列は空欄）', marks(a).slice(1, 3).join(',') === 'earn,', marks(a).join(','));
+  ok('判定しない週は連続も切らない（7+7+6=20）', a.html('hero').includes('class="bignum">20<'), a.html('hero').slice(0, 80));
+}
+{
+  // 必須タスクがなくても、空白日のある週はこれまでどおり −1 かリセット
+  const tasks = [
+    Object.assign({}, TASKS[0], { createdAt: '2026-08-09', archived: true, archivedAt: '2026-08-09' }),
+    Object.assign({}, TWO[1], { createdAt: '2026-08-09', archived: true, archivedAt: '2026-08-10' }),
+    Object.assign({}, TWO[0], { id: 't3', createdAt: '2026-08-11' })
+  ];
+  const logs = Object.assign(without(span('2026-08-09', '2026-08-15', ['t3']), '2026-08-12'), span('2026-08-16', '2026-08-21', ['t3']));
+  const a = boot(base({ tasks, logs }), '2026-08-21');
+  ok('必須タスクがなくても空白日のある週はリセット', marks(a)[2] === 'reset', marks(a).join(','));
+}
+{
+  // 今週の必須タスクが1つもないとき（日曜にアーカイブして、週の途中で新しく登録した）は「判定なし」
+  const tasks = [
+    Object.assign({}, TASKS[0], { createdAt: '2026-08-09', archived: true, archivedAt: '2026-08-16' }),
+    Object.assign({}, TWO[1], { createdAt: '2026-08-18' })
+  ];
+  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-09', '2026-08-17'), span('2026-08-18', '2026-08-21', ['t2'])) }), '2026-08-21');
+  ok('今週の必須タスクがなければ 判定なし', outlook(a) === '判定なし', String(outlook(a)));
+}
+{
+  // 登録した日より前の日には、そのタスクを記録できない（さかのぼって埋めると最初の週の判定がずれるため）
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-19' })];
+  const a = boot(base({ tasks, logs: span('2026-08-19', '2026-08-21') }), '2026-08-21');
+  [...a.w.document.querySelectorAll('.cell')].find(c => day(c) === '15').click();
+  ok('登録前の日のシートにはタスクが出ない', a.text('sheet-body') === 'タスクがありません。', a.text('sheet-body'));
+  [...a.w.document.querySelectorAll('.cell')].find(c => day(c) === '19').click();
+  ok('登録した日のシートには出る', a.w.document.querySelectorAll('#sheet-body .toggle').length === 1, a.text('sheet-body'));
+}
+{
+  // 登録前の日にすでに記録がある場合（データ由来）は、消せるように出す
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '2026-08-19' })];
+  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-19', '2026-08-21'), { '2026-08-15': ['t1'] }) }), '2026-08-21');
+  [...a.w.document.querySelectorAll('.cell')].find(c => day(c) === '15').click();
+  a.w.document.querySelector('#sheet-body .toggle').click();
+  ok('登録前の日の記録はシートから消せる', !a.state().logs['2026-08-15'], JSON.stringify(a.state().logs));
+}
+
+console.log('\n― アーカイブしたタスクの過去日 ―');
+{
+  // 8/9週に必須だった懸垂を、あとでアーカイブした。8/12 のシートから記録を直せる
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-21' })];
+  const logs = Object.assign(span('2026-08-09', '2026-08-21'), { '2026-08-10': ['t1', 't2'] });
+  const a = boot(base({ tasks, logs }), '2026-08-21');
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '12').click();
+  const names = () => [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent);
+  ok('その週に必須だったアーカイブ済みタスクがシートに出る（今週の判定にもまだ入るので「今週まで」）', names().join(',') === 'スクワット,懸垂（今週まで）', names().join(','));
+  ok('前提：懸垂をやった8/9週は獲得', marks(a)[2] === 'earn', marks(a).join(','));
+}
+{
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-21' })];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('前提：懸垂をやっていない8/9週はリセット', marks(a)[2] === 'reset', marks(a).join(','));
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '12').click();
+  a.w.document.querySelectorAll('#sheet-body .toggle')[1].click();
+  ok('アーカイブ済みタスクを過去日に記録して週を直せる', marks(a)[2] === 'earn', marks(a).join(','));
+  ok('週の結果がシートの文にも反映される', a.text('sheet-body').includes('この週はシールドを1枚獲得しました。'), a.text('sheet-body'));
+}
+{
+  // その週に必須でなくても、その日に記録があるアーカイブ済みタスクは出す（取り消せるように）
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-11' })];
+  const logs = Object.assign(span('2026-08-16', '2026-08-21'), { '2026-08-17': ['t1', 't2'] });
+  const a = boot(base({ tasks, logs }), '2026-08-21');
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '17').click();
+  const names = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent);
+  ok('記録のあるアーカイブ済みタスクはシートに出る', names.includes('懸垂（アーカイブ済み）'), names.join(','));
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '18').click();
+  const names2 = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent);
+  ok('必須でも記録もないアーカイブ済みタスクは出さない', names2.join(',') === 'スクワット', names2.join(','));
+}
+
+console.log('\n― 今週の見込み ―');
+{
+  const a = boot(base({ tasks: TWO, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  ok('未実施のタスクがあれば あと n タスク', outlook(a) === 'あと 1 タスク', String(outlook(a)));
+}
+{
+  const a = boot(base({ logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  ok('欠けなく全タスク済みなら +1 枚 見込み', outlook(a) === '+1 枚 見込み', String(outlook(a)));
+}
+{
+  const a = boot(base({ logs: without(span('2026-08-09', '2026-08-21'), '2026-08-18') }), '2026-08-21');
+  ok('欠けた日があり手持ちがあれば −1 枚 見込み', outlook(a) === '−1 枚 見込み', String(outlook(a)));
+}
+{
+  const a = boot(base({ logs: without(span('2026-08-16', '2026-08-21'), '2026-08-17') }), '2026-08-21');
+  ok('欠けた日があり手持ちがなければ 週末でリセット', outlook(a) === '週末でリセット', String(outlook(a)));
+}
+{
+  // 今日はまだ終わっていないので空白日に数えない（記録した瞬間の見込みが正しいこと）
+  const a = boot(base({ logs: span('2026-08-16', '2026-08-20') }), '2026-08-21');
+  ok('前提：今日は未達なので「今週」欄は出ない', outlook(a) === null);
+  a.w.document.querySelector('.cell.today').click();
+  a.w.document.querySelector('#sheet-body .toggle').click();
+  ok('今日を記録すると +1 枚 見込み', outlook(a) === '+1 枚 見込み', String(outlook(a)));
 }
 
 console.log('\n― 記録操作と巻き戻し ―');
@@ -116,20 +394,18 @@ console.log('\n― 記録操作と巻き戻し ―');
   todayCell.click();
   a.w.document.querySelector('#sheet-body .toggle').click();
   ok('カレンダー経由で今日を記録 → 4日連続', a.html('hero').includes('>4<'), a.html('hero').slice(0, 80));
-  ok('自己ベストが更新される', a.state().meta.bestStreak === 4, String(a.state().meta.bestStreak));
+  ok('自己ベストが更新される', stats(a).best === '4 日', stats(a).best);
 }
 {
-  // シールドで守った日を後から「やってた」に直す → シールドが返却される
-  const logs = daysBack('2026-08-19', 14);
-  const a = boot(base({ logs }), '2026-08-21');
-  ok('前提：シールドを1枚消費している', a.state().shieldsConsumed.length === 1);
-  const cells = [...a.w.document.querySelectorAll('.cell')];
-  const shieldCell = cells.find(c => c.classList.contains('shield'));
-  ok('カレンダーにシールド表示が出ている', !!shieldCell);
-  shieldCell.click();
+  // シールドで守った週の空白日を後から「やってた」に直す → その週は獲得に変わる
+  const a = boot(base({ logs: without(span('2026-07-26', '2026-08-21'), '2026-08-05') }), '2026-08-21');
+  ok('前提：8/2週はシールド消費', marks(a)[1] === 'protect', marks(a).join(','));
+  [...a.w.document.querySelectorAll('.cell')].find(c => day(c) === '5' && !c.classList.contains('out')).click();
+  ok('シートに週の結果が出る', a.text('sheet-body').includes('シールドを1枚使って'), a.text('sheet-body'));
   a.w.document.querySelector('#sheet-body .toggle').click();
-  ok('達成に修正するとシールドが返却される', a.state().shieldsConsumed.length === 0, JSON.stringify(a.state().shieldsConsumed));
-  ok('その日が達成としてカウントされ15日連続になる', a.html('hero').includes('>15<'), a.html('hero').slice(0, 80));
+  ok('達成に直すと週の結果も獲得に変わる', marks(a)[1] === 'earn', marks(a).join(','));
+  ok('消費が取り消され3枚になる', stats(a).sh === '3 枚' && stats(a).used === '0 週', JSON.stringify(stats(a)));
+  ok('その日が数えられ27日連続になる', a.html('hero').includes('>27<'), a.html('hero').slice(0, 80));
 }
 
 console.log('\n― 午前4時の区切り ―');
@@ -159,13 +435,15 @@ console.log('\n― タスク管理 ―');
   a.w.document.getElementById('new-task').value = '  トイレでスクワット10回  ';
   a.w.document.getElementById('add-task').click();
   ok('タスクを追加できる（前後の空白を除去）', a.state().tasks.length === 1 && a.state().tasks[0].name === 'トイレでスクワット10回', JSON.stringify(a.state().tasks));
+  ok('追加した日を持つ', a.state().tasks[0].createdAt === '2026-08-21', JSON.stringify(a.state().tasks));
   a.w.confirm = () => true;
   a.w.document.querySelector('#task-editor .mini.danger').click();
   ok('削除はアーカイブであり物理削除ではない', a.state().tasks.length === 1 && a.state().tasks[0].archived === true, JSON.stringify(a.state().tasks));
+  ok('アーカイブした日を持つ', a.state().tasks[0].archivedAt === '2026-08-21', JSON.stringify(a.state().tasks));
 }
 {
   // アーカイブしても過去の記録と連続日数は残る
-  const a = boot(base({ logs: daysBack('2026-08-21', 6), tasks: [{ id: 't1', name: '懸垂', order: 0, archived: true }] }), '2026-08-21');
+  const a = boot(base({ logs: daysBack('2026-08-21', 6), tasks: [{ id: 't1', name: '懸垂', order: 0, archived: true, createdAt: '2026-01-01', archivedAt: '2026-08-21' }] }), '2026-08-21');
   ok('アーカイブ後も連続日数は保持される', a.html('hero').includes('>6<'), a.html('hero').slice(0, 80));
 }
 
@@ -173,15 +451,46 @@ console.log('\n― データ保存 ―');
 {
   const a = boot(base({ logs: daysBack('2026-08-21', 2) }), '2026-08-21');
   ok('localStorageに書き込まれている', !!a.state().logs['2026-08-21']);
-  ok('lastCheckedDateが今日で更新される', a.state().meta.lastCheckedDate === '2026-08-21', a.state().meta.lastCheckedDate);
 }
 {
   // 壊れたデータからの復旧
+  const alerts = [];
   const dom = new JSDOM(HTML, {
     runScripts: 'dangerously', url: 'https://example.com/', pretendToBeVisual: true,
-    beforeParse(w) { w.localStorage.setItem('ember.v1', '{壊れたJSON'); }
+    beforeParse(w) { w.localStorage.setItem('ember.v1', '{壊れたJSON'); w.alert = m => alerts.push(m); }
   });
   ok('壊れた保存データでもクラッシュしない', !!dom.window.document.getElementById('hero').textContent);
+  const ls = dom.window.localStorage;
+  const brokenKeys = [...Array(ls.length).keys()].map(i => ls.key(i)).filter(k => k.startsWith('ember.v1.broken.'));
+  ok('読めなかった元データは退避する', brokenKeys.length === 1 && ls.getItem(brokenKeys[0]) === '{壊れたJSON', brokenKeys.join(','));
+  await new Promise(r => setTimeout(r, 20));
+  ok('空の状態で起動したことを知らせ、退避先を伝える', alerts.length === 1 && alerts[0].includes(brokenKeys[0]), alerts.join('/'));
+}
+{
+  // 2回目に読めなくなっても、前に退避したデータも今回のデータも残す
+  const alerts = [];
+  const dom = new JSDOM(HTML, {
+    runScripts: 'dangerously', url: 'https://example.com/', pretendToBeVisual: true,
+    beforeParse(w) { w.localStorage.setItem('ember.v1.broken.1', '最初のデータ'); w.localStorage.setItem('ember.v1', '{2回目'); w.alert = m => alerts.push(m); }
+  });
+  const ls = dom.window.localStorage;
+  const values = [...Array(ls.length).keys()].map(i => ls.key(i)).filter(k => k.startsWith('ember.v1.broken.')).map(k => ls.getItem(k)).sort();
+  ok('前に退避したデータも今回のデータも残す', values.join(',') === '{2回目,最初のデータ', values.join(','));
+}
+{
+  // 退避できなかったときは、残せたとは言わない
+  const alerts = [];
+  const dom = new JSDOM(HTML, {
+    runScripts: 'dangerously', url: 'https://example.com/', pretendToBeVisual: true,
+    beforeParse(w) {
+      w.localStorage.setItem('ember.v1', '{壊れたJSON');
+      const orig = w.Storage.prototype.setItem;
+      w.Storage.prototype.setItem = function(k, v){ if(k.startsWith('ember.v1.broken')) throw new Error('QuotaExceeded'); return orig.call(this, k, v); };
+      w.alert = m => alerts.push(m);
+    }
+  });
+  await new Promise(r => setTimeout(r, 20));
+  ok('退避できなかったときはバックアップからの復元を促す', alerts.length === 1 && alerts[0].includes('退避できませんでした'), alerts.join('/'));
 }
 
 console.log('\n― 描画 ―');
@@ -194,43 +503,294 @@ console.log('\n― 描画 ―');
   ok('達成済みのタスクに done が付く', a.w.document.querySelector('.task').classList.contains('done'));
 }
 
-console.log('\n― タスクの通算回数 ―');
+console.log('\n― タスクの今週の回数 ―');
 {
   const a = boot(base({
     tasks: [
-      { id: 't1', name: 'スクワット', order: 0, archived: false },
-      { id: 't2', name: '読書', order: 1, archived: false },
-      { id: 't3', name: '日記', order: 2, archived: false }
+      { id: 't1', name: 'スクワット', order: 0, archived: false, createdAt: '2026-01-01' },
+      { id: 't2', name: '読書', order: 1, archived: false, createdAt: '2026-01-01' },
+      { id: 't3', name: '日記', order: 2, archived: false, createdAt: '2026-01-01' }
     ],
-    logs: { '2026-08-19': ['t1'], '2026-08-20': ['t1', 't2'], '2026-08-21': ['t1'] }
+    // 8/14 は先週なので今週の回数には入らない
+    logs: { '2026-08-14': ['t1', 't2'], '2026-08-19': ['t1'], '2026-08-20': ['t1', 't2'], '2026-08-21': ['t1'] }
   }), '2026-08-21');
   // 再描画のたびに行は作り直されるので、毎回引き直す
-  const tally = n => a.w.document.querySelectorAll('.task .tally')[n].textContent;
+  const tally = n => a.w.document.querySelectorAll('.task .tally')[n];
 
-  ok('通算回数がタスクの行に出る', tally(0) === '3 回', tally(0));
-  ok('タスクごとに独立して数える', tally(1) === '1 回', tally(1));
-  ok('1度もやっていないタスクにも 0 を出す', tally(2) === '0 回', tally(2));
+  ok('今週の回数がタスクの行に出る', tally(0).textContent === '今週 3 回', tally(0).textContent);
+  ok('タスクごとに独立して数える', tally(1).textContent === '今週 1 回', tally(1).textContent);
+  ok('今週やっていないタスクにも 0 を出す', tally(2).textContent === '今週 0 回', tally(2).textContent);
+  ok('今週0回の必須タスクだけ色を付ける', tally(2).classList.contains('due') && !tally(0).classList.contains('due') && !tally(1).classList.contains('due'));
 
-  // 過去日を編集すれば通算も追随する（連続日数と同じく毎回数え直しているため）
+  // 今週の過去日を編集すれば追随する（毎回数え直しているため）
   const at = n => [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === String(n));
   at(19).click();
   a.w.document.querySelectorAll('#sheet-body .toggle')[0].click();  // 8/19 の t1 を取り消す
-  ok('過去日を取り消すと通算が減る', tally(0) === '2 回', tally(0));
-  a.w.document.querySelectorAll('#sheet-body .toggle')[1].click();  // 8/19 に t2 を足す
-  ok('過去日を足すと通算が増える', tally(1) === '2 回', tally(1));
+  ok('今週の記録を取り消すと減る', tally(0).textContent === '今週 2 回', tally(0).textContent);
+  a.w.document.querySelectorAll('#sheet-body .toggle')[2].click();  // 8/19 に t3 を足す
+  ok('今週の記録を足すと増え、色が外れる', tally(2).textContent === '今週 1 回' && !tally(2).classList.contains('due'), tally(2).textContent);
+  at(14).click();
+  a.w.document.querySelectorAll('#sheet-body .toggle')[0].click();  // 先週の 8/14 の t1 を取り消す
+  ok('先週の記録を直しても今週の回数は変わらない', tally(0).textContent === '今週 2 回', tally(0).textContent);
+
+  // 通算回数は設定画面のタスク一覧に出す
+  const total = n => a.w.document.querySelectorAll('#task-editor .tally')[n].textContent;
+  ok('設定画面に通算回数が出る', total(0) === '通算 2 回' && total(1) === '通算 2 回' && total(2) === '通算 1 回',
+     [0, 1, 2].map(total).join(','));
 }
 {
   const a = boot(base({ logs: {} }), '2026-08-21');
-  ok('記録が1件もなくても 0 回として出る', a.w.document.querySelector('.task .tally').textContent === '0 回',
-     a.w.document.querySelector('.task .tally').textContent);
+  const t = a.w.document.querySelector('.task .tally');
+  ok('記録が1件もなくても 今週 0 回 として出る', t.textContent === '今週 0 回', t.textContent);
+  ok('記録がなくても必須なので色が付く', t.classList.contains('due'));
 }
 {
-  // アーカイブされたタスクの記録は残るが、行そのものが出ない
+  // 今週の途中で追加したタスクは今週の判定に入らないので、0回でも色を付けない
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { createdAt: '2026-08-18' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  const t = a.w.document.querySelectorAll('.task .tally')[1];
+  ok('今週から追加したタスクは0回でも色を付けない', t.textContent === '今週 0 回' && !t.classList.contains('due'), t.className);
+}
+{
+  // 前の週までにアーカイブしたタスクは、記録は残るが行そのものが出ない
   const a = boot(base({
-    tasks: [{ id: 't1', name: 'スクワット', order: 0, archived: true }],
-    logs: { '2026-08-21': ['t1'] }
+    tasks: [{ id: 't1', name: 'スクワット', order: 0, archived: true, createdAt: '2026-01-01', archivedAt: '2026-08-15' }],
+    logs: { '2026-08-14': ['t1'] }
   }), '2026-08-21');
-  ok('アーカイブ済みのタスクは行ごと出ない', a.w.document.querySelectorAll('.task .tally').length === 0);
+  ok('前の週までにアーカイブしたタスクは行ごと出ない', a.w.document.querySelectorAll('.task .tally').length === 0);
+  ok('行がなければ長押しの案内も出ない', a.text('hint') === '', a.text('hint'));
+}
+{
+  // 今週アーカイブしたタスクは今週の判定にまだ入るので、週が終わるまでホームに残す
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { archived: true, archivedAt: '2026-08-19' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  const rows = [...a.w.document.querySelectorAll('.task')];
+  ok('今週アーカイブしたタスクは「今週まで」付きでホームに残る', rows.length === 2 && rows[1].querySelector('.name').textContent === '懸垂（今週まで）',
+     rows.map(r => r.querySelector('.name').textContent).join(','));
+  ok('今週まだやっていなければ色が付く', rows[1].querySelector('.tally').classList.contains('due'));
+  ok('今週の見込みにも数えられる', outlook(a) === 'あと 1 タスク', String(outlook(a)));
+  const b = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-23');
+  ok('週が明けるとホームから消える', b.w.document.querySelectorAll('.task').length === 1, String(b.w.document.querySelectorAll('.task').length));
+}
+{
+  // 壊れた記録（配列でない）が混ざっていても描画が止まらない
+  const logs = Object.assign(span('2026-08-16', '2026-08-21'), { '2026-08-18': {}, '2026-08-19': 'broken' });
+  const a = boot(base({ logs }), '2026-08-21');
+  ok('配列でない記録があっても描画できる', a.w.document.querySelectorAll('.cell').length > 0 && a.text('hero') !== '', a.text('hero').slice(0, 40));
+  // {} は記録なし、1つだけの文字列は1件の記録として扱う（8/18 だけ欠ける → 連続は 2+3=5）
+  ok('配列でない記録は1件の記録として扱い、中身のないものは捨てる', a.html('hero').includes('class="bignum">5<'), a.html('hero').slice(0, 80));
+  // どのタスクにも当てはまらない 'broken' はシートに「削除されたタスク」として出て、消せる
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '19').click();
+  const labels = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent).join(',');
+  ok('文字列だった記録もシートに出る', labels === 'スクワット10回,（削除されたタスク）', labels);
+  a.w.document.querySelectorAll('#sheet-body .toggle')[1].click();
+  a.w.document.querySelectorAll('#sheet-body .toggle')[0].click();
+  ok('シートから直せる', JSON.stringify(a.state().logs['2026-08-19']) === '["t1"]', JSON.stringify(a.state().logs['2026-08-19']));
+}
+{
+  // logs や tasks の形が壊れていても起動できる
+  const a = boot(base({ logs: null, tasks: 'broken' }), '2026-08-21');
+  ok('logs が null でも起動できる', a.html('hero').includes('>0</span> 日連続'), a.html('hero').slice(0, 80));
+}
+{
+  // 区切り時刻が数字でなくても固まらない（既定の午前4時に戻す）
+  const seed = base({ logs: span('2026-08-16', '2026-08-21') }); seed.settings.dayBoundaryHour = 'x';
+  const a = boot(seed, '2026-08-21');
+  ok('区切り時刻が壊れていても起動できる', a.html('hero').includes('class="bignum">6<'), a.html('hero').slice(0, 80));
+  a.w.document.getElementById('nav-settings').click();
+  ok('区切り時刻は既定の4時に戻る', a.w.document.getElementById('boundary').value === '4', a.w.document.getElementById('boundary').value);
+}
+{
+  // タスクの中身が壊れていても起動できる
+  const a = boot(base({ tasks: [null, 'x', { name: 'idなし' }, TASKS[0]], logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  ok('null や id のないタスクは読み飛ばす', a.w.document.querySelectorAll('.task').length === 1 && a.html('hero').includes('class="bignum">6<'), a.html('hero').slice(0, 80));
+  a.w.document.getElementById('nav-settings').click();
+  a.w.document.getElementById('new-task').value = '懸垂';
+  a.w.document.getElementById('add-task').click();
+  ok('壊れたタスクがあってもタスクを追加できる', a.state().tasks.length === 2, JSON.stringify(a.state().tasks));
+}
+{
+  // 日付として正しくないキーや、文字列でない id は捨てる
+  const logs = Object.assign(span('2026-08-20', '2026-08-21'), { '2020-1-1x': ['t1'], '2026-8-1': ['t1'], '2026-02-30': ['t1'], '2026-08-19': [null] });
+  const a = boot(base({ logs }), '2026-08-21');
+  ok('正しくない日付キーがあっても連続が出る', a.html('hero').includes('class="bignum">2<'), a.html('hero').slice(0, 80));
+  ok('正しくない日付キーは保存し直すと消える', (a.w.document.querySelector('.cell.today').click(), a.w.document.querySelector('#sheet-body .toggle').click(), Object.keys(a.state().logs).join(',') === '2026-08-20'), Object.keys(a.state().logs).join(','));
+}
+{
+  // 未来日のログは通算回数にも数えない（達成日数とそろえる）
+  const a = boot(base({ logs: Object.assign(span('2026-08-20', '2026-08-21'), { '2026-09-30': ['t1'] }) }), '2026-08-21');
+  ok('未来日のログは通算回数に数えない', a.w.document.querySelector('#task-editor .tally').textContent === '通算 2 回' && stats(a).days === '2 日',
+     a.w.document.querySelector('#task-editor .tally').textContent + ' / ' + stats(a).days);
+}
+{
+  // 壊れたバックアップを復元しても、その後の起動が止まらない
+  const a = boot(base({ logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  a.w.confirm = () => true; a.w.alert = () => {};
+  a.w.restore(new a.w.File([JSON.stringify({ logs: null })], 'broken.json', { type: 'application/json' }));
+  await new Promise(r => setTimeout(r, 50));
+  ok('logs が null のバックアップを復元しても描画できる', a.html('hero').includes('>0</span> 日連続'), a.html('hero').slice(0, 80));
+  ok('保存されるデータの形もそろっている', JSON.stringify(a.state().logs) === '{}' && Array.isArray(a.state().tasks), JSON.stringify(a.state()));
+}
+{
+  // 今週登録して今週アーカイブしたタスクは今週の判定に入らないので、ホームにも残さない
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { createdAt: '2026-08-18', archived: true, archivedAt: '2026-08-19' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  ok('判定に入らないアーカイブ済みタスクはホームに残さない', a.w.document.querySelectorAll('.task').length === 1, String(a.w.document.querySelectorAll('.task').length));
+}
+{
+  // アーカイブ時の確認文：今週の判定に入っているタスクだけ「ホームに残る」と伝える
+  const tasks = [TWO[0], Object.assign({}, TWO[1], { createdAt: '2026-08-18' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  const msgs = []; a.w.confirm = m => { msgs.push(m); return false; };
+  const del = a.w.document.querySelectorAll('#task-editor .mini.danger');
+  del[0].click(); del[1].click();
+  ok('今週の判定に入っているタスクは「今週の間だけ残る」と伝える', msgs[0].includes('今週の間だけ残ります'), msgs[0]);
+  ok('今週の判定に入らないタスクにはそう伝えない', !msgs[1].includes('今週の間だけ残ります'), msgs[1]);
+}
+{
+  // 記録がまだなくても、起点は登録した日（8/17）。それより後にアーカイブしたタスクは今週まだ必須
+  const tasks = [
+    Object.assign({}, TASKS[0], { createdAt: '2026-08-17', archived: true, archivedAt: '2026-08-18' }),
+    Object.assign({}, TWO[1], { createdAt: '2026-08-17', archived: true, archivedAt: '2026-08-19' })
+  ];
+  const a = boot(base({ tasks }), '2026-08-19');
+  const home = [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(',');
+  ok('記録がなくても、登録日より後にアーカイブしたタスクはホームに残る', home === 'スクワット10回（今週まで）,懸垂（今週まで）', home);
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '18').click();
+  const sheet = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent).join(',');
+  ok('シートにもホームと同じく出る', sheet === 'スクワット10回（今週まで）,懸垂（今週まで）', sheet);
+}
+{
+  // 登録した日にアーカイブした打ち間違いのタスクは、最初の週の必須に入らない
+  const tasks = [
+    Object.assign({}, TASKS[0], { createdAt: '2026-08-10' }),
+    { id: 't9', name: 'スクワト', order: 1, archived: true, createdAt: '2026-08-10', archivedAt: '2026-08-10' }
+  ];
+  const a = boot(base({ tasks, logs: span('2026-08-10', '2026-08-21') }), '2026-08-21');
+  ok('登録した日にアーカイブしたタスクは最初の週でも必須でない', marks(a)[2] === 'earn', marks(a).join(','));
+}
+{
+  // どのタスクにも当てはまらない記録は捨てず、シートに「削除されたタスク」として出して消せるようにする
+  const a = boot(base({ logs: Object.assign(span('2026-08-20', '2026-08-21'), { '2026-08-19': ['zz'] }) }), '2026-08-21');
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '19').click();
+  const labels = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent);
+  ok('存在しないタスクの記録はシートに「削除されたタスク」として出る', labels.join(',') === 'スクワット10回,（削除されたタスク）', labels.join(','));
+  a.w.document.querySelectorAll('#sheet-body .toggle')[1].click();
+  ok('シートから消せる', !a.state().logs['2026-08-19'], JSON.stringify(a.state().logs));
+}
+{
+  // タスク欄が壊れていても、記録は消さない
+  const a = boot(base({ tasks: { broken: true }, logs: span('2026-08-20', '2026-08-21') }), '2026-08-21');
+  a.w.document.querySelector('.cell.today').click();
+  a.w.document.querySelector('#sheet-body .toggle').click();   // 削除されたタスクとして出ている t1 を取り消す
+  ok('タスク欄が壊れていても記録は残る', JSON.stringify(Object.keys(a.state().logs)) === '["2026-08-20"]', JSON.stringify(a.state().logs));
+}
+{
+  // 日曜に登録してすぐアーカイブした（打ち間違いの取り消し）タスクは、その週の必須に入らない
+  const tasks = [TASKS[0], { id: 't9', name: 'スクワト', order: 1, archived: true, createdAt: '2026-08-16', archivedAt: '2026-08-16' }];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  ok('登録した日にアーカイブしたタスクは必須にしない', outlook(a) === '+1 枚 見込み', String(outlook(a)));
+  ok('ホームにも残さない', a.w.document.querySelectorAll('.task').length === 1, String(a.w.document.querySelectorAll('.task').length));
+}
+{
+  // アーカイブ時の確認文：今日登録したタスクには「今週の間だけ残る」と言わない
+  // 日曜（8/23）に登録したタスクは今週の必須に入るが、今日アーカイブすれば打ち間違いの取り消し扱い
+  const tasks = [TASKS[0], { id: 't9', name: 'スクワト', order: 1, archived: false, createdAt: '2026-08-23' }];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-22') }), '2026-08-23');
+  const msgs = []; a.w.confirm = m => { msgs.push(m); return false; };
+  a.w.document.querySelectorAll('#task-editor .mini.danger')[1].click();
+  ok('今日登録したタスクには「今週の間だけ残る」と言わない', !msgs[0].includes('今週の間だけ残ります'), msgs[0]);
+}
+{
+  // 今週の判定に入らないタスクをアーカイブすると、すぐホームから消える（確認文どおり）
+  const tasks = [TASKS[0], { id: 't9', name: 'B', order: 1, archived: false, createdAt: '2026-08-18' }];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-20') }), '2026-08-20');
+  const msgs = []; a.w.confirm = m => { msgs.push(m); return true; };
+  a.w.document.querySelectorAll('#task-editor .mini.danger')[1].click();
+  ok('判定に入らないタスクは確認文で「残る」と言わない', !msgs[0].includes('今週の間だけ残ります'), msgs[0]);
+  ok('アーカイブするとすぐホームから消える', [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(',') === 'スクワット10回',
+     [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(','));
+}
+{
+  // アーカイブ済みタスクの今日の記録を誤って消しても、その日のうちは行が残り戻せる
+  const tasks = [TASKS[0], { id: 't9', name: '懸垂', order: 1, archived: true, createdAt: '2026-08-18', archivedAt: '2026-08-21' }];
+  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-16', '2026-08-21'), { '2026-08-21': ['t1', 't9'] }) }), '2026-08-21');
+  a.w.document.querySelector('.cell.today').click();
+  a.w.document.querySelectorAll('#sheet-body .toggle')[1].click();   // 懸垂の記録を消す
+  const labels = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent);
+  ok('記録を消してもその日のうちは行が残る', labels.join(',') === 'スクワット10回,懸垂（アーカイブ済み）', labels.join(','));
+}
+{
+  // 並び順が欠けたり重なったりしていても、0から振り直して並べ替えできる
+  const tasks = [
+    { id: 'a', name: 'A', order: 1, archived: false, createdAt: '2026-01-01' },
+    { id: 'b', name: 'B', archived: false, createdAt: '2026-01-01' },
+    { id: 'c', name: 'C', order: 1, archived: false, createdAt: '2026-01-01' }
+  ];
+  const a = boot(base({ tasks }), '2026-08-21');
+  const names = () => [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(',');
+  ok('並び順は今の並びのまま振り直す', names() === 'A,C,B', names());
+  a.w.document.getElementById('nav-settings').click();
+  a.w.document.querySelectorAll('#task-editor .row')[1].querySelectorAll('.mini')[0].click();   // C を上へ
+  ok('振り直した並び順で上下ボタンが効く', names() === 'C,A,B', names());
+}
+{
+  // 週の途中で登録し、翌週にアーカイブしたタスクも、存在していた日のシートには出る（記録し忘れを直せる）
+  const tasks = [TASKS[0], { id: 't9', name: '懸垂', order: 1, archived: true, createdAt: '2026-08-12', archivedAt: '2026-08-18' }];
+  const a = boot(base({ tasks, logs: span('2026-08-09', '2026-08-21') }), '2026-08-21');
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '13').click();
+  const labels = [...a.w.document.querySelectorAll('#sheet-body .toggle .t')].map(e => e.textContent);
+  ok('存在していた日のシートにはアーカイブ済みタスクが出る（今週の判定にもまだ入るので「今週まで」）', labels.join(',') === 'スクワット10回,懸垂（今週まで）', labels.join(','));
+}
+{
+  // 今日記録したタスクをアーカイブしても、今日の記録はホームから取り消せる
+  const tasks = [TASKS[0], { id: 't9', name: '懸垂', order: 1, archived: true, createdAt: '2026-08-18', archivedAt: '2026-08-21' }];
+  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-16', '2026-08-21'), { '2026-08-21': ['t1', 't9'] }) }), '2026-08-21');
+  const names = [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent);
+  ok('今日記録のあるアーカイブ済みタスクはホームに残る', names.join(',') === 'スクワット10回,懸垂（アーカイブ済み）', names.join(','));
+}
+{
+  // 同じ日に同じタスクが重複して入っていても1回として数え、1回の操作で取り消せる
+  const a = boot(base({ logs: { '2026-08-21': ['t1', 't1'] } }), '2026-08-21');
+  ok('重複した記録は1回として数える', a.w.document.querySelector('.task .tally').textContent === '今週 1 回', a.w.document.querySelector('.task .tally').textContent);
+  a.w.document.querySelector('.cell.today').click();
+  a.w.document.querySelector('#sheet-body .toggle').click();
+  ok('重複していても1回の操作で取り消せる', !a.state().logs['2026-08-21'], JSON.stringify(a.state().logs));
+}
+{
+  // 年を打ち間違えた古すぎる記録も捨てない（使い始めた日より前なので数えないだけ）。画面で選べない設定値は既定値に戻す
+  const seed = base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-08-20' })], logs: Object.assign(span('2026-08-20', '2026-08-21'), { '1026-10-20': ['t1'] }) });
+  seed.settings.dayBoundaryHour = 12; seed.settings.theme = 'sepia';
+  const a = boot(seed, '2026-08-21');
+  ok('古すぎる日付の記録は数えない', a.html('hero').includes('class="bignum">2<') && stats(a).days === '2 日', a.html('hero').slice(0, 80));
+  ok('古すぎる日付の記録は通算回数にも数えない', a.w.document.querySelector('#task-editor .tally').textContent === '通算 2 回', a.w.document.querySelector('#task-editor .tally').textContent);
+  ok('古すぎる日付の記録の月まではさかのぼらない', a.w.document.getElementById('grid-prev').disabled);
+
+  a.w.document.querySelector('.cell.today').click();
+  a.w.document.querySelector('#sheet-body .toggle').click();
+  ok('古すぎる日付の記録も保存し直したときに消えない', !!a.state().logs['1026-10-20'], JSON.stringify(Object.keys(a.state().logs)));
+  a.w.document.getElementById('nav-settings').click();
+  ok('選べない区切り時刻は既定の4時に戻る', a.w.document.getElementById('boundary').value === '4', a.w.document.getElementById('boundary').value);
+  ok('選べないテーマはシステムに戻る', a.w.document.getElementById('theme').value === 'system' && !a.w.document.documentElement.hasAttribute('data-theme'),
+     a.w.document.getElementById('theme').value);
+}
+{
+  // 古すぎる記録があっても、ほかの正しい記録の月まではさかのぼれる
+  const tasks = [{ id: 'x', name: 'X', order: 0, archived: true, createdAt: '2026-05-01', archivedAt: '2026-05-01' },
+    Object.assign({}, TASKS[0], { order: 1, createdAt: '2026-08-20' })];
+  const a = boot(base({ tasks, logs: Object.assign({ '1999-12-31': ['t1'], '2026-05-01': ['x'] }, span('2026-08-20', '2026-08-21')) }), '2026-08-21');
+  for (let i = 0; i < 3; i++) a.w.document.getElementById('grid-prev').click();
+  ok('正しい記録のある月まではさかのぼれる', a.text('grid-title') === '5月' && a.w.document.getElementById('grid-prev').disabled, a.text('grid-title'));
+}
+{
+  // 並び順が欠けたタスクや文字列の archived があっても、追加・並べ替えが壊れない
+  const tasks = [{ id: 't1', name: 'スクワット', archived: 'false', createdAt: '2026-01-01' }, { id: 't2', name: '懸垂', order: 1, archived: false, createdAt: '2026-01-01' }];
+  const a = boot(base({ tasks }), '2026-08-21');
+  ok('文字列の archived はアーカイブ扱いにしない', a.w.document.querySelectorAll('.task').length === 2, String(a.w.document.querySelectorAll('.task').length));
+  a.w.document.getElementById('nav-settings').click();
+  a.w.document.getElementById('new-task').value = '読書';
+  a.w.document.getElementById('add-task').click();
+  ok('並び順が欠けていても新しいタスクの並び順は数値になる', a.state().tasks.every(t => Number.isFinite(t.order)), JSON.stringify(a.state().tasks.map(t => t.order)));
 }
 
 console.log('\n― 行の長押し ―');
@@ -258,7 +818,7 @@ function logged(a, date = '2026-08-21') { return (a.state().logs[date] || []).in
   pointer(row(a), 'pointerup', 20, 20);
   ok('行のどこを長押ししても記録される', logged(a), JSON.stringify(a.state().logs));
   ok('記録した行は aria-pressed が true', row(a).getAttribute('aria-pressed') === 'true');
-  ok('記録すると通算回数がその場で増える', row(a).querySelector('.tally').textContent === '1 回',
+  ok('記録すると今週の回数がその場で増える', row(a).querySelector('.tally').textContent === '今週 1 回',
      row(a).querySelector('.tally').textContent);
 }
 {
@@ -275,7 +835,7 @@ function logged(a, date = '2026-08-21') { return (a.state().logs[date] || []).in
   await sleep(HOLD);
   pointer(row(a), 'pointerup', 20, 20);
   ok('もう一度長押しすると取り消せる', !logged(a), JSON.stringify(a.state().logs));
-  ok('取り消すと通算回数も戻る', row(a).querySelector('.tally').textContent === '0 回',
+  ok('取り消すと今週の回数も戻る', row(a).querySelector('.tally').textContent === '今週 0 回',
      row(a).querySelector('.tally').textContent);
 }
 {
@@ -344,6 +904,20 @@ console.log('\n― カレンダーの月表示 ―');
   ok('前の月のマスに日付が出る', cells.slice(0, 6).map(day).join(',') === '26,27,28,29,30,31', cells.slice(0, 6).map(day).join(','));
   ok('後ろは翌月のマスで埋まる', cells.slice(37).map(day).join(',') === '1,2,3,4,5', cells.slice(37).map(day).join(','));
   ok('グリッドは7の倍数で埋まる', cells.length % 7 === 0, String(cells.length));
+  ok('各週の右に結果列が1つずつある', a.w.document.querySelectorAll('#grid .wk').length === cells.length / 7, String(a.w.document.querySelectorAll('#grid .wk').length));
+  const kids = [...a.w.document.getElementById('grid').children];
+  ok('結果列は土曜のマスの直後に並ぶ', kids.every((e, i) => e.classList.contains(i % 8 === 7 ? 'wk' : 'cell')));
+  const fresh = boot(base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-08-21' })] }), '2026-08-21');
+  ok('今日使い始めたなら結果列はすべて空欄', marks(fresh).every(m => m === '') && [...fresh.w.document.querySelectorAll('#grid .wk')].every(e => e.textContent === ''));
+}
+{
+  const a = boot(base({ logs: Object.assign(without(span('2026-07-26', '2026-08-08'), '2026-08-05')) }), '2026-08-21');
+  const wk = [...a.w.document.querySelectorAll('#grid .wk')];
+  ok('獲得の週は +1', wk[0].textContent === '+1', wk[0].textContent);
+  ok('消費の週は −1', wk[1].textContent === '−1', wk[1].textContent);
+  ok('リセットの週は ×', wk[2].textContent === '×' && wk[2].classList.contains('reset'), wk[2].textContent);
+  ok('結果列に読み上げ用の説明がある', wk[1].getAttribute('aria-label') === 'シールドを1枚使って連続を維持した週', wk[1].getAttribute('aria-label'));
+  ok('結果列は画像として読み上げられる', wk[1].getAttribute('role') === 'img', String(wk[1].getAttribute('role')));
 }
 {
   // 月末に近い日でも表示は同じ1か月分（月めくりはしない）
@@ -366,7 +940,7 @@ console.log('\n― 月めくり ―');
 }
 {
   // 7月と8月に記録がある → 7月まで戻れる
-  const a = boot(base({ logs: Object.assign(daysBack('2026-07-05', 3), daysBack('2026-08-21', 3)) }), '2026-08-21');
+  const a = boot(base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-07-03' })], logs: Object.assign(daysBack('2026-07-05', 3), daysBack('2026-08-21', 3)) }), '2026-08-21');
   const prev = a.w.document.getElementById('grid-prev');
   const next = a.w.document.getElementById('grid-next');
   ok('初期表示は今月', a.text('grid-title') === '8月', a.text('grid-title'));
@@ -387,9 +961,132 @@ console.log('\n― 月めくり ―');
   ok('今月に戻ると次へは進めない', a.w.document.getElementById('grid-next').disabled);
 }
 {
-  // 記録が1件もなければ、めくる先がない
+  // 今月使い始めて記録が1件もなければ、めくる先がない
+  const a = boot(base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-08-21' })] }), '2026-08-21');
+  ok('今月使い始めて記録がなければ両方とも押せない', a.w.document.getElementById('grid-prev').disabled && a.w.document.getElementById('grid-next').disabled);
+}
+{
+  // 記録がなくても、使い始めた月まではさかのぼれる（判定済みの週を確かめ、記録し忘れを直せる）
+  const a = boot(base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-07-20' })] }), '2026-08-21');
+  ok('使い始めた月まではさかのぼれる', !a.w.document.getElementById('grid-prev').disabled);
+  a.w.document.getElementById('grid-prev').click();
+  ok('使い始めた月より前へは戻れない', a.text('grid-title') === '7月' && a.w.document.getElementById('grid-prev').disabled, a.text('grid-title'));
+}
+{
+  // id に " が入っていても、長押しで記録したあとの演出が壊れない
+  const tasks = [Object.assign({}, TASKS[0], { id: 't"1' })];
+  const a = boot(base({ tasks }), '2026-08-21');
+  const errors = []; a.w.addEventListener('error', e => errors.push(e.message));
+  const el = a.w.document.querySelector('.task');
+  el.dispatchEvent(new a.w.MouseEvent('pointerdown', { bubbles: true, clientX: 20, clientY: 20 }));
+  await new Promise(r => setTimeout(r, 650));
+  el.dispatchEvent(new a.w.MouseEvent('pointerup', { bubbles: true, clientX: 20, clientY: 20 }));
+  ok('id に " が入っていても記録でき、エラーにならない', JSON.stringify(a.state().logs['2026-08-21']) === '["t\\"1"]' && !errors.length,
+     JSON.stringify(a.state().logs) + ' ' + errors.join('/'));
+}
+{
+  // 時計が戻って登録日が今日より後になっても、ホームからは記録できる
+  const a = boot(base({ tasks: [Object.assign({}, TASKS[0], { createdAt: '2026-08-22' })] }), '2026-08-21');
+  ok('登録日が今日より後でもホームに出る', a.w.document.querySelectorAll('.task').length === 1, String(a.w.document.querySelectorAll('.task').length));
+}
+{
+  // 今日記録した、今週の判定に入らないタスクをアーカイブすると「今日の間だけ残る」と伝える
+  const tasks = [TASKS[0], { id: 't9', name: 'B', order: 1, archived: false, createdAt: '2026-08-19' }];
+  const a = boot(base({ tasks, logs: Object.assign(span('2026-08-16', '2026-08-21'), { '2026-08-21': ['t1', 't9'] }) }), '2026-08-21');
+  const msgs = []; a.w.confirm = m => { msgs.push(m); return true; };
+  a.w.document.querySelectorAll('#task-editor .mini.danger')[1].click();
+  ok('今日の記録があれば「記録を取り消すまで残る」と伝える', msgs[0].includes('記録を取り消すまではホームに残ります'), msgs[0]);
+  ok('実際に今日の間はホームに残る', [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(',') === 'スクワット10回,B（アーカイブ済み）',
+     [...a.w.document.querySelectorAll('.task .name')].map(e => e.textContent).join(','));
+}
+{
+  // 未来のアーカイブ日は今日にそろえる（毎週必須のまま外せなくなるのを防ぐ）
+  const tasks = [TASKS[0], Object.assign({}, TWO[1], { createdAt: '2026-08-01', archived: true, archivedAt: '2099-01-01' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21') }), '2026-08-21');
+  ok('未来のアーカイブ日は今日にそろえる', a.w.eval('state').tasks.find(x => x.id === 't2').archivedAt === '2026-08-21');
+  a.w.document.querySelector('.cell.today').click();
+  a.w.document.querySelector('#sheet-body .toggle').click();   // 保存させる（今日の記録を一度消して戻す）
+  a.w.document.querySelector('#sheet-body .toggle').click();
+  const saved = a.state();
+  const b2 = boot(Object.assign(saved, { logs: span('2026-08-16', '2026-08-28') }), '2026-08-28');
+  ok('翌週にはそのタスクは必須でない', outlook(b2) === '+1 枚 見込み' && b2.w.document.querySelectorAll('.task').length === 1, String(outlook(b2)));
+}
+{
+  // タスクが1つもない日のシートでも、週の結果は出す
+  const tasks = [
+    Object.assign({}, TASKS[0], { createdAt: '2026-07-01', archived: true, archivedAt: '2026-07-08' }),
+    Object.assign({}, TWO[1], { createdAt: '2026-07-21' })
+  ];
+  const a = boot(base({ tasks, logs: span('2026-07-01', '2026-07-08') }), '2026-07-25');
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '16').click();
+  ok('タスクがない日のシートにも週の結果を出す', a.text('sheet-body').includes('タスクがありません。') && a.text('sheet-body').includes('この週は連続がリセットされました。'), a.text('sheet-body'));
+}
+{
+  // 使い始めた日より前の日のシートには、その週の結果を出さない（判定していないため）
+  const tasks = [
+    { id: 'a', name: 'A', order: 0, archived: true, createdAt: '2026-08-10', archivedAt: '2026-08-10' },
+    Object.assign({}, TASKS[0], { order: 1, createdAt: '2026-08-12' })
+  ];
+  const a = boot(base({ tasks, logs: Object.assign({ '2026-08-10': ['a'] }, span('2026-08-12', '2026-08-21')) }), '2026-08-21');
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '10').click();
+  ok('使い始めた日より前の日には週の結果を出さない', !a.text('sheet-body').includes('この週は'), a.text('sheet-body'));
+  [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '13').click();
+  ok('使い始めた日以降の日には週の結果を出す', a.text('sheet-body').includes('この週はシールドを1枚獲得しました。'), a.text('sheet-body'));
+}
+{
+  // 達成日数も、使い始めた日より前の記録は数えない（連続日数とそろえる）
+  const tasks = [
+    { id: 'a', name: 'A', order: 0, archived: true, createdAt: '2026-08-17', archivedAt: '2026-08-17' },
+    Object.assign({}, TASKS[0], { order: 1, createdAt: '2026-08-19' })
+  ];
+  const a = boot(base({ tasks, logs: Object.assign({ '2026-08-17': ['a'] }, span('2026-08-19', '2026-08-21')) }), '2026-08-21');
+  ok('使い始めた日より前の記録は達成日数に数えない', stats(a).days === '3 日' && stats(a).best === '3 日', JSON.stringify(stats(a)));
+}
+{
+  // 数値の id や、配列でない1件だけの記録でも、タスクと記録を失わない
+  const a = boot(base({ tasks: [{ id: 1, name: 'スクワット', order: 0, archived: false, createdAt: '2026-08-16' }],
+    logs: Object.assign(span('2026-08-16', '2026-08-20', [1]), { '2026-08-21': 1 }) }), '2026-08-21');
+  ok('数値の id でもタスクと記録を読み込める', a.w.document.querySelectorAll('.task').length === 1 && a.html('hero').includes('class="bignum">6<'), a.html('hero').slice(0, 80));
+  a.w.document.querySelector('.cell.today').click();
+  ok('読み込んだ記録はシートで操作できる', a.w.document.querySelector('#sheet-body .toggle').classList.contains('on'), a.text('sheet-body'));
+}
+{
+  // 登録日が文字列でなくても読み込みで落ちず、ほかのデータが消えない
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: ['2026-08-16'] }), Object.assign({}, TWO[1], { createdAt: '2026-08-16' })];
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21', ['t1', 't2']) }), '2026-08-21');
+  ok('文字列でない登録日があってもデータを読み込める', a.w.document.querySelectorAll('.task').length === 2 && a.html('hero').includes('class="bignum">6<'), a.html('hero').slice(0, 80));
+}
+{
+  // 登録日の年が壊れていても、使い始めた日が大昔にならない
+  const tasks = [Object.assign({}, TASKS[0], { createdAt: '1026-10-01' }), Object.assign({}, TWO[1], { createdAt: '2026-08-16' })];
+  const t0 = Date.now();
+  const a = boot(base({ tasks, logs: span('2026-08-16', '2026-08-21', ['t2']) }), '2026-08-21');
+  ok('壊れた登録日は持たない', !('createdAt' in a.w.eval('state').tasks.find(x => x.id === 't1')), JSON.stringify(a.w.eval('state').tasks));
+  ok('使い始めた日は正しい登録日から', marks(a).every(m => m === '') && a.html('hero').includes('class="bignum">6<'), marks(a).join(',') + ' ' + (Date.now() - t0) + 'ms');
+}
+{
+  // 登録した日にアーカイブしたタスクは、記録があっても打ち間違い扱い（記録の足し引きで起点が動かないように）
+  const tasks = [
+    { id: 'a', name: 'A', order: 0, archived: true, createdAt: '2026-08-19', archivedAt: '2026-08-19' },
+    Object.assign({}, TASKS[0], { order: 1, createdAt: '2026-08-20' })
+  ];
+  const a = boot(base({ tasks, logs: Object.assign({ '2026-08-19': ['a'] }, span('2026-08-20', '2026-08-21')) }), '2026-08-21');
+  ok('登録した日にアーカイブしたタスクは、記録があっても使い始めた日に数えない', a.html('hero').includes('class="bignum">2<'), a.html('hero').slice(0, 80));
+}
+{
+  // 記録を足しても使い始めた日は動かず、過去の週の結果が悪くならない
+  const tasks = [
+    { id: 'a', name: 'A', order: 0, archived: true, createdAt: '2026-08-17', archivedAt: '2026-08-17' },
+    Object.assign({}, TASKS[0], { order: 1, createdAt: '2026-08-19' })
+  ];
+  const without_ = boot(base({ tasks, logs: span('2026-08-19', '2026-08-22') }), '2026-08-23');
+  const with_ = boot(base({ tasks, logs: Object.assign({ '2026-08-17': ['a'] }, span('2026-08-19', '2026-08-22')) }), '2026-08-23');
+  ok('打ち間違いタスクの記録があってもなくても週の結果は同じ', marks(without_)[3] === 'earn' && marks(with_)[3] === 'earn', marks(without_).join(',') + ' / ' + marks(with_).join(','));
+}
+{
+  // アプリの関数がブラウザの window.history を上書きしない
   const a = boot(base({}), '2026-08-21');
-  ok('記録がなければ両方とも押せない', a.w.document.getElementById('grid-prev').disabled && a.w.document.getElementById('grid-next').disabled);
+  ok('window.history はブラウザのまま', typeof a.w.history === 'object' && typeof a.w.history.pushState === 'function', typeof a.w.history);
 }
 {
   // めくった先の過去日も編集できる
@@ -408,9 +1105,9 @@ console.log('\n― 消化数バッジ ―');
   // 8/21 は3個、8/20 は1個、8/19 は未達
   const a = boot(base({
     tasks: [
-      { id: 't1', name: 'スクワット', order: 0, archived: false },
-      { id: 't2', name: '読書', order: 1, archived: false },
-      { id: 't3', name: '日記', order: 2, archived: false }
+      { id: 't1', name: 'スクワット', order: 0, archived: false, createdAt: '2026-01-01' },
+      { id: 't2', name: '読書', order: 1, archived: false, createdAt: '2026-01-01' },
+      { id: 't3', name: '日記', order: 2, archived: false, createdAt: '2026-01-01' }
     ],
     // 8/22 は未来。復元データ由来の未来日ログでもバッジを出さないことを確かめる
     logs: { '2026-08-20': ['t1'], '2026-08-21': ['t1', 't2', 't3'], '2026-08-22': ['t1'] }
@@ -432,11 +1129,11 @@ console.log('\n― 消化数バッジ ―');
   ok('記録を取り消すとバッジも減る', badge(at(21)) === '2', String(badge(at(21))));
 }
 {
-  // シールドで埋めた日は消化していないのでバッジを出さない
-  const a = boot(base({ logs: daysBack('2026-08-19', 14) }), '2026-08-21');
-  const shieldCell = [...a.w.document.querySelectorAll('.cell')].find(c => c.classList.contains('shield'));
-  ok('前提：シールドのマスがある', !!shieldCell);
-  ok('シールドの日にはバッジが出ない', badge(shieldCell) === null, String(badge(shieldCell)));
+  // シールドで守った週の空白日も、消化していないのでバッジを出さない
+  const a = boot(base({ logs: without(span('2026-07-26', '2026-08-21'), '2026-08-05') }), '2026-08-21');
+  const gap = [...a.w.document.querySelectorAll('.cell:not(.out)')].find(c => day(c) === '5');
+  ok('前提：その週はシールド消費', marks(a)[1] === 'protect', marks(a).join(','));
+  ok('シールドで守った週の空白日にはバッジが出ない', badge(gap) === null && !gap.classList.contains('done'), String(badge(gap)));
 }
 {
   // 前の月のマスでも同じように出る
@@ -484,14 +1181,6 @@ console.log('\n― テーマ ―');
   ok('再起動後もライトが維持される', a.w.document.documentElement.getAttribute('data-theme') === 'light');
   ok('設定画面にも反映されている', (a.w.document.getElementById('nav-settings').click(), a.w.document.getElementById('theme').value === 'light'));
 }
-{
-  // 旧バージョンの保存データ（themeキーなし）からの移行
-  const old = { version:1, settings:{ dayBoundaryHour:4 }, tasks:TASKS, logs:daysBack('2026-08-21',3), shieldsConsumed:[], meta:{ lastCheckedDate:null, bestStreak:0, lastBackupAt:null } };
-  const a = boot(old, '2026-08-21');
-  ok('themeキーが無い古いデータでも壊れない', a.html('hero').includes('class="bignum">3<'), a.html('hero').slice(0,60));
-  a.w.document.getElementById('nav-settings').click();
-  ok('既定値の system が補われる', a.w.document.getElementById('theme').value === 'system');
-}
 
 console.log('\n― 名称とコピー ―');
 {
@@ -511,24 +1200,6 @@ console.log('\n― 名称とコピー ―');
   const empty = a.w.document.querySelector('.empty');
   ok('タスク未登録なら空状態を出す', !!empty);
   ok('空状態のコピーから説教が消えている', empty && !empty.textContent.includes('ばかばかしい'), empty && empty.textContent);
-}
-
-console.log('\n― 旧バージョンからの移行 ―');
-{
-  const seed = base({ logs: daysBack('2026-08-21', 9) });
-  const dom = new JSDOM(HTML, {
-    runScripts: 'dangerously', url: 'https://example.com/', pretendToBeVisual: true,
-    beforeParse(w) {
-      const fixed = new Date('2026-08-21T12:00:00').getTime();
-      const R = w.Date;
-      w.Date = class extends R { constructor(...a){ return a.length ? new R(...a) : new R(fixed); } static now(){ return fixed; } };
-      w.localStorage.setItem('tsuzukeru.v1', JSON.stringify(seed));   // 旧キーだけ存在する状態
-    }
-  });
-  const w = dom.window;
-  ok('旧キーのデータを引き継ぐ', w.document.getElementById('hero').innerHTML.includes('class="bignum">9<'), w.document.getElementById('hero').innerHTML.slice(0, 60));
-  ok('新キーに移し替えられている', !!w.localStorage.getItem('ember.v1'));
-  ok('旧キーは削除される', w.localStorage.getItem('tsuzukeru.v1') === null);
 }
 
 console.log('\n― 反応する色（連続日数に連動）―');
